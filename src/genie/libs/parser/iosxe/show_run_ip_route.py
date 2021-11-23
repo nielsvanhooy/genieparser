@@ -8,6 +8,7 @@ class ShowRunIpRouteSchema(MetaParser):
         "ip_routes": {
             Any(): {
                 'vrf': str,
+                'subnet': str,
                 'subnet_mask': str,
                 'next_hop': str,
                 'forward_address': str,
@@ -40,9 +41,9 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
         result_dict = {}
 
         p0 = re.compile(
-            r'(^ip\sroute|^ip\sroute\s(?P<vrf>vrf\s([A-Za-z0-9]*)))\s+(?P<subnet>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<subnet_mask>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<next_hop>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\w+.*?)\s+((name)\s+(?P<name>.*($|\s))|track\s+(?P<track_object>\d+)|(((?P<forward_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))|(?P<metric>\d{0,3})))|\s+(name)\s+(?P<name_two>.*)|\s+track\s+(?P<track_object_two>\d+)|\s+(?P<metric_two>\d+)')
+            r'((^ip\sroute|^ip\sroute\s(?P<vrf>vrf\s([A-Za-z0-9]*))))\s+(?P<subnet>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<subnet_mask>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<next_hop>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\w+.*?)(\s+((name)\s+(?P<name>.*($|\s))|track\s+(?P<track_object>\d+)|(((?P<forward_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))|(?P<metric>\d{0,3})))|\s+(name)\s+(?P<name_two>.*)|\s+track\s+(?P<track_object_two>\d+)|\s+(?P<metric_two>\d+)|)')
         logging.debug(out)
-        for line in out.splitlines():
+        for count, line in enumerate(out.splitlines()):
             line = line.strip()
 
             match = p0.match(line)
@@ -60,8 +61,9 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
                          match.groupdict()['metric_two'] or ''
                 name = match.groupdict()['name'] or \
                        match.groupdict()['name_two'] or ''
-                result_dict[subnet] = {
+                result_dict[count] = {
                     'vrf': vrf,
+                    'subnet': subnet,
                     'subnet_mask': subnet_mask,
                     'next_hop': next_hop,
                     'forward_address': forward_address,
