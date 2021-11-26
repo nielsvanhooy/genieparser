@@ -1,5 +1,10 @@
+import logging
+
 from genie.metaparser import MetaParser, Any
 import re
+
+
+logger = logging.getLogger(__name__)
 
 
 class ShowRunIpRouteSchema(MetaParser):
@@ -35,7 +40,7 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
     ip route 139.156.202.96 255.255.255.240 GigabitEthernet0/1/1
     ip route 139.156.202.96 255.255.255.240 GigabitEthernet0/1/1 240
     ip route 139.156.202.96 255.255.255.240 GigabitEthernet0/1/1 10.194.48.110
-    ip route 139.156.202.96 255.255.255.240 GigabitEthernet0/1/1 10.194.48.110 128
+    ip route 192.168.1.0 255.255.255.0 GigabitEthernet0/0/0 213.162.171.193 name Management track 100
     ip route 139.156.202.96 255.255.255.240 10.194.48.110 name Management
     ip route 139.156.202.96 255.255.255.240 10.194.48.110 255
     ip route 139.156.202.96 255.255.255.240 Vlan100 255
@@ -48,6 +53,11 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
     ip route 139.156.202.96 255.255.255.240 Vlan100 255 track 100
     ip route 139.156.202.96 255.255.255.240 Vlan100 10.194.48.110 255 track 100
     ip route 139.156.202.96 255.255.255.240 GigabitEthernet0/1/1 10.194.48.110 255 track 100
+    ip route 10.73.238.0 255.255.254.0 10.73.224.1 name Dat"a`
+    ip route 60.250.233.50 255.255.255.255 GigabitEthernet0/0 115.186.231.1 name Taiwan=Ware&house-TWTL-EP.10.1.1.1
+    ip route vrf wlvbnavpn-11495 10.122.230.176 255.255.255.255 Cellular0/2/0 10 permanent name Loopback0_WBLM1151
+    ip route 139.156.202.96 255.255.255.240 Serial0/0/0:0.110 10.194.48.110 255 track 100
+    ip route vrf infinity01 10.100.0.0 255.255.0.0 FastEthernet4 222.229.224.185 global name Lala3-VPN-Inifnity-ED
     """
 
     def cli(self, output=None):
@@ -71,7 +81,7 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
 
         for count, line in enumerate(out.splitlines()):
             try:
-                count = count+1
+                count = count + 1 # i dont like counting from zero
                 line = line.strip()
                 temp_string = line
 
@@ -152,6 +162,6 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
                 continue
 
             except UnboundLocalError as e:
-                print(line) # have to make something sustainable
+                logger.info(f"{e} on static route: {line}")
                 continue
         return ip_routes_dict
