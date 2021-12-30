@@ -21,6 +21,7 @@ class ShowRunIpRouteSchema(MetaParser):
                 'metric': str,
                 'track_object': str,
                 'permanent': str,
+                'tag': str,
                 'parsing_leftovers': str,
             }
         }
@@ -78,6 +79,7 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
         p_metric = re.compile(r'(?P<metric>\d+)')
         p_permanent = re.compile(r'(?P<permanent>permanent)')
         p_vrf_global = re.compile(r'(?P<vrf_global>global)')
+        p_tag = re.compile(r'tag (?P<tag>\d+)')
 
         for count, line in enumerate(out.splitlines()):
             try:
@@ -139,6 +141,13 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
                     # we remove metric statements from the line
                     temp_string = temp_string.replace(f'{vrf_global}', '').strip()
 
+                tag = ''
+                match_tag = p_tag.match(temp_string)
+                if match_tag:
+                    tag = match_tag.groupdict()['tag']
+                    # we remove tag statements from the line
+                    temp_string = temp_string.replace(f'tag {tag}', '').strip()
+
                 if 'ip_routes' not in ip_routes_dict:
                     result_dict = ip_routes_dict.setdefault('ip_routes', {})
 
@@ -157,6 +166,7 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
                     'metric': metric,
                     'track_object': track_object,
                     'permanent': permanent,
+                    'tag': tag,
                     'parsing_leftovers': parsing_errors
                 }
                 continue
