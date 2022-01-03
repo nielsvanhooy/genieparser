@@ -151,10 +151,7 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
                 if 'ip_routes' not in ip_routes_dict:
                     result_dict = ip_routes_dict.setdefault('ip_routes', {})
 
-                parsing_errors = ''
-                if temp_string:
-                    parsing_errors = temp_string
-
+                parsing_errors = temp_string or ''
                 result_dict[count] = {
                     'vrf': vrf,
                     'vrf_global': vrf_global,
