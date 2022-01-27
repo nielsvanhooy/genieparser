@@ -1,7 +1,6 @@
 from genie.metaparser import MetaParser
 from genie.metaparser.util.schemaengine import Any, Optional
 import re
-import logging
 
 
 # to convert prefix to subnetmask. huawei only shows prefix len
@@ -12,7 +11,8 @@ def translater_cidr_netmask(cidr):
     :return: netmask as string
     """
     return '.'.join(
-        [str((m>>(3-i)*8)&0xff) for i,m in enumerate([-1<<(32-int(cidr))]*4)]
+        [str((m >> (3-i)*8) & 0xff) for i, m in enumerate(
+            [-1 << (32-int(cidr))] * 4)]
     )
 
 
