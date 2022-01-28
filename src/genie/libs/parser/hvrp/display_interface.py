@@ -22,7 +22,8 @@ class DisplayInterfaceSchema(MetaParser):
                 Optional('ip_address'): str,
                 Optional('subnet_prefix'): str,
                 Optional('subnet_mask'): str,
-                Optional('enabled'): bool,
+                Optional('admin_status'): str,
+                Optional('crc_errors'): str,
                 Optional('line_status'): bool,
                 Optional('line_up_since'): str,
                 Optional('interface_description'): str,
@@ -52,6 +53,7 @@ class DisplayInterfaceSchema(MetaParser):
                 Optional('port_mode'): str,
                 Optional('port_speed'): str,
                 Optional('port_negotiation'): str,
+                Optional('mac_address'): str,
             }
     }
 
@@ -77,7 +79,7 @@ class DisplayInterface(DisplayInterfaceSchema):
         # GigabitEthernet0/0/0 current state : Administratively DOWN
         # LoopBack0 current state : DOWN
 
-        p1 = re.compile(r'^(?P<interface>[\w\/\.\-\:]+) +current +state +:(?P<enabled>[\w\s]+$)')
+        p1 = re.compile(r'^(?P<interface>[\w\/\.\-\:]+) +current +state +:(?P<admin_status>[\w\s]+$)')
 
         # Line protocol current state : UP
         # Line protocol current state : DOWN
@@ -131,6 +133,12 @@ class DisplayInterface(DisplayInterfaceSchema):
         # Duplex: FULL, Negotiation: ENABLE
         p15 = re.compile(r'^Duplex:\s+(?P<port_speed>\d+|\w+),\s+Negotiation:\s+(?P<port_negotiation>.*$)')
 
+        # IP Sending Frames' Format is PKTFMT_ETHNT_2, Hardware address is c444-7d9c-77c9
+        p16 = re.compile(r'^IP Sending Frames\' .*Hardware address is\s+(?P<mac_address>[\d\w]{0,4}-[\d\w]{0,4}-[\d\w]{0,4})$')
+
+        #  note below begins with 2 leading spaces in the cli
+        #   CRC:                      0,  Giants:                      0
+        p17 = re.compile(r'^.*CRC:\s+(?P<crc_errors>.*(?=,))')
 
         ####### ROUTED port Interfaces
 
@@ -165,17 +173,14 @@ class DisplayInterface(DisplayInterfaceSchema):
             m = p1.match(line)
             if m:
                 interface = m.groupdict()['interface']
-                interface_state = m.groupdict()['enabled']
+                interface_state = m.groupdict()['admin_status']
 
                 if interface not in interface_dict:
                     interface_dict[interface] = {}
                 if 'ellular' in interface:
                     interface_dict[interface]['cellular_info'] = {}
 
-                if 'UP' in interface_state:
-                    interface_dict[interface]['enabled'] = True
-                else:
-                    interface_dict[interface]['enabled'] = False
+                interface_dict[interface]['admin_status'] = interface_state
 
             m = p2.match(line)
             if m:
@@ -249,7 +254,8 @@ class DisplayInterface(DisplayInterfaceSchema):
 
             m = p14.match(line)
             if m:
-                interface_dict[interface]['port_speed'] = m.groupdict()['port_speed']
+                interface_dict[interface]['port_speed'] = m.groupdict()[
+                    'port_speed']
 
             m = p15.match(line)
             if m:
@@ -257,6 +263,16 @@ class DisplayInterface(DisplayInterfaceSchema):
                     'port_speed']
                 interface_dict[interface]['port_negotiation'] = m.groupdict()[
                     'port_negotiation']
+
+            m = p16.match(line)
+            if m:
+                interface_dict[interface]['mac_address'] = m.groupdict()[
+                    'mac_address']
+
+            m = p17.match(line)
+            if m:
+                interface_dict[interface]['crc_errors'] = m.groupdict()[
+                    'crc_errors']
 
             m = p1_routed.match(line)
             if m:
