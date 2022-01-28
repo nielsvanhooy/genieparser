@@ -74,7 +74,9 @@ class ShowRunIpRoute(ShowRunIpRouteSchema):
         # FINDS OPTIONAL track tracking_object: ex track 100
         p_track_with_track_object = re.compile(r'(.*)track\s+(?P<tracking_object>\d+)')
         # FINDS OPTIONAL name iamastaticroute: ex name Management
-        p_route_name = re.compile(r'(.*)name\s+(?P<route_name>([A-Za-z0-9-_@\"\`\&\,\+\=\/\'\.\(\)\[\]]*))')
+        # 1/28/2022 commented below because found a route with "TE ST" in it bleggh
+        # p_route_name = re.compile(r'(.*)name\s+(?P<route_name>([A-Za-z0-9-_@\"\`\&\,\+\=\/\'\.\(\)\[\]]*))')
+        p_route_name = re.compile(r'(.*)name\s+(?P<route_name>(\".*\")|([A-Za-z0-9-_@\"\`\&\,\+\=\/\'\.\(\)\[\]]*))')
         p_forward_address = re.compile(r'(?P<forward_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})')
         p_metric = re.compile(r'(?P<metric>\d+)')
         p_permanent = re.compile(r'(?P<permanent>permanent)')

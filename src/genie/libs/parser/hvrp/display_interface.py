@@ -77,8 +77,7 @@ class DisplayInterface(DisplayInterfaceSchema):
         # GigabitEthernet0/0/0 current state : Administratively DOWN
         # LoopBack0 current state : DOWN
 
-        p1 = re.compile(
-            r'^(?P<interface>[\w\/\.\-\:]+) +current +state +:(?P<enabled>[\w\s]+$)')
+        p1 = re.compile(r'^(?P<interface>[\w\/\.\-\:]+) +current +state +:(?P<enabled>[\w\s]+$)')
 
         # Line protocol current state : UP
         # Line protocol current state : DOWN
