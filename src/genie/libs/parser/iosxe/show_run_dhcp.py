@@ -52,6 +52,26 @@ class ShowRunDhcp(ShowRunDhcpSchema):
      domain-name dhcpdomein
     !
     """
+    # testing was done with below strings
+    """
+        no ip dhcp conflict logging
+    !
+    ip dhcp pool BGB00045-0
+     network 172.16.1.0 255.255.255.0
+    !
+    ip dhcp pool hatseflats-1
+     network 172.16.2.0 255.255.255.0
+    !
+    ip dhcp excluded-address 10.0.11.0 10.0.11.2
+    !
+    ip dhcp pool ONE-1
+     network 10.0.11.0 255.255.255.0
+     default-router 10.0.11.1 
+     domain-name dhcpdomein
+    !
+    !\r\nip dhcp pool hatseflats-1\r\n network 172.16.2.0 255.255.255.0\r\n!
+    """
+
     def cli(self, output=None):
         real_cmd = "show running-config"
         out = self.device.execute(real_cmd) if output is None else output
