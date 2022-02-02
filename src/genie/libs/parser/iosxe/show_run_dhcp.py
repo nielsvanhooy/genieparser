@@ -172,7 +172,6 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         p_get_dhcp_excluded_vrf = re.compile(
             r"ip dhcp excluded-address (vrf (?P<vrf>.*?\s)(?P<start_range>[0-9\.x]+))\s+(?P<end_range>[0-9\.x]+)")
 
-
         # regex extraction patterns for inside a block
         p_block_pool_name = re.compile(r"")
         p_block_domain = re.compile(r"")
@@ -187,7 +186,36 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         for line in out.splitlines():
             line = line.strip()
 
+            # not syure if needed
+            """
+            \nip dhcp pool SUVM1202\n network 130.1.41.0 255.255.255.0\n default-router 130.1.41.253 \n option 186 ip 172.24.1.2 \n option 190 hex 01bb\n option 161 ascii "172.24.1.2"\n option
+ 162 ascii "/"\n option 184 ascii "wdmserverrapport"\n option 185 ascii "DellWyse"\n
 
+
+dhcp_pools = [
+   {
+      "pool_name":"ONE-1",
+      "domain":"nelis.nl",
+      "excluded_ip_addresses":[
+         
+      ],
+      "gateway":"None",
+      "network":{
+         "ip":"None",
+         "subnet_mask":"None"
+      },
+      "dns":[
+         "10.1.1.99"
+      ],
+      "netbios":[
+         "10.1.1.101"
+      ],
+      "tftp":[
+         "10.1.1.100"
+      ]
+   }
+]
+            """
 
     # work with this for regexes
             """
@@ -267,33 +295,4 @@ ip pool dhcppool-vlan10
  excluded-ip-address 172.29.87.26 172.29.87.254
  conflict auto-recycle interval day 0 hour 0 minute 5
  #
-            """
-
-
-            # not syure if needed
-            """
-            \nip dhcp pool SUVM1202\n network 130.1.41.0 255.255.255.0\n default-router 130.1.41.253 \n option 186 ip 172.24.1.2 \n option 190 hex 01bb\n option 161 ascii "172.24.1.2"\n option
- 162 ascii "/"\n option 184 ascii "wdmserverrapport"\n option 185 ascii "DellWyse"\n
-
-
- {
-   "pool_name":"pool-1",
-   "domain":"None",
-   "excluded_ip_addresses":[
-      
-   ],
-   "gateway":"None",
-   "network":{
-      "ip":"172.16.1.0",
-      "subnet_mask":"255.255.255.0"
-   },
-   "dns":[
-      
-   ],
-   "netbios":[
-      
-   ],
-   "tftp":[
-      
-   ]
             """
