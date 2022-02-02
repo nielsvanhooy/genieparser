@@ -1,6 +1,6 @@
 import logging
-
-from genie.metaparser import MetaParser, Any
+from genie.metaparser import MetaParser
+from genie.metaparser.util.schemaengine import Any, Optional
 import re
 
 logger = logging.getLogger(__name__)
@@ -74,21 +74,25 @@ one-gv-2595bk-41(config)#ip dhcp ?
 class ShowRunDhcpSchema(MetaParser):
     schema = {
         "dhcp": {
-            Any(): {
-                'vrf': str,
-                'vrf_global': str,
-                'subnet': str,
-                'subnet_mask': str,
-                'next_hop': str,
-                'forward_address': str,
-                'route_name': str,
-                'metric': str,
-                'track_object': str,
-                'permanent': str,
-                'tag': str,
-                'parsing_leftovers': str,
-            }
-        }
+            Optional("global_settings"): {
+            },
+            Optional("dhcp_pools"): {
+                Any(): {
+                    Optional("domain"): str,
+                    Optional("gateway"): str,
+                    Optional("networks"): [{
+                        Optional("ip"): str,
+                        Optional("subnet_mask"): str,
+                        Optional("secundary"): bool,
+                    }],
+                    Optional("dhcp_options"): [{
+                        Optional("option"): str,
+                        Optional("type"): str,
+                        Optional("data"): str
+                    }]
+                },
+            },
+        },
     }
 
 
@@ -163,25 +167,120 @@ class ShowRunDhcp(ShowRunDhcpSchema):
             r'(?P<dhcp_pool_block>ip dhcp pool[\s\S]*?(?=\n.*?\!))')
 
         # note: can be multiples of below in a configuration
-        # ip dhcp excluded-address 10.0.11.0 10.0.11.2
+        # ex: ip dhcp excluded-address 10.0.11.0 10.0.11.2
         p_get_dhcp_excluded = re.compile(
             r"ip dhcp excluded-address ((?P<start_range>[0-9\.x]+))\s+(?P<end_range>[0-9\.x]+)")
 
         # note: can be multiples of below in a configuration
-        # ip dhcp excluded-address vrf lala 10.0.11.0 10.0.11.2
+        # ex: ip dhcp excluded-address vrf lala 10.0.11.0 10.0.11.2
         p_get_dhcp_excluded_vrf = re.compile(
             r"ip dhcp excluded-address (vrf (?P<vrf>.*?\s)(?P<start_range>[0-9\.x]+))\s+(?P<end_range>[0-9\.x]+)")
 
         # regex extraction patterns for inside a block
-        p_block_pool_name = re.compile(r"")
-        p_block_domain = re.compile(r"")
-        p_block_gateway = re.compile(r"")
-        p_block_options = re.compile(r"")
+        # note that we stripped the ident space of it
 
+        # ex:  domain-name Wijnen.local
+        p_block_pool_name = re.compile(r"^ip dhcp pool (?P<pool_name>.*)$")
+        p_block_domain = re.compile(r"^domain-name (?P<domain_name>.*$)")
+
+        # ex:  default-router 10.24.125.254
+        # ex:  default-router hostname.com
+        p_block_gateway = re.compile(
+            r"^default-router (?P<gateway>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\w.*)$")
+
+        # ex:  network 10.0.10.160 255.255.255.240
+        p_block_network = re.compile(
+            r"^network\s(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<subnet_mask>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$")
+        # ex:  network 10.0.10.160 255.255.255.240 secondary
+        p_block_network_secondary = re.compile(
+            r"^network\s(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<subnet_mask>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+(?P<secondary>secondary)$")
+
+        # note: there are a lot of options. for parsing we do not opinionate
+        # we also dont do matching in the option data.
+        # because it can contain almost everything
+        p_block_options = re.compile(
+            r"^option\s(?P<option>\d+)\s(?P<type>\w+)\s(?P<data>.*)$")
+
+        # we capture everything after the keyword and split it later.
+        # ex:  netbios-name-server 172.16.1.21 domain2.com
+        # ex:  netbios-name-server domain1.com domain2.com
+        # ex:  netbios-name-server 172.16.1.21 172.14.9.2
+        p_block_netbios_servers = re.compile(
+            r"^netbios-name-server\s(?P<netbios_servers>.*)$")
+
+        # lease can be in format: lease 0, lease 0 0, lease 0 0 0
+        # where the zero can be a number. in format hour minute second
+        # or with the word infinite.
+        p_block_lease_time = re.compile(
+            r"^lease\s+(?P<lease_options>infinite|.*)$")
 
         get_dhcp_excluded = p_get_dhcp_excluded.findall(out)
         get_dhcp_excluded_vrf = p_get_dhcp_excluded_vrf.findall(out)
         get_dhcp_pool_blocks = p_get_dhcp_pool_blocks.findall(out)
+
+        # try except for routers without pools
+
+        dhcp_pools = {}
+        for block in get_dhcp_pool_blocks:
+            for line in block.splitlines():
+                line = line.strip()
+
+                m = p_block_pool_name.match(line)
+                if m:
+                    pool_name = m.groupdict()['pool_name']
+                    # the name of the pool defines the dict
+                    # we also setup the structure
+                    dhcp_pools[pool_name] = {}
+                    dhcp_pools[pool_name]['networks'] = []
+                    dhcp_pools[pool_name]['options'] = []
+
+
+                m = p_block_domain.match(line)
+                if m:
+                    domain_name = m.groupdict()['domain_name']
+                    dhcp_pools[pool_name]['domain'] = domain_name
+
+                m = p_block_gateway.match(line)
+                if m:
+                    gateway = m.groupdict()['gateway']
+                    dhcp_pools[pool_name]['gateway'] = gateway
+
+                m = p_block_network.match(line)
+                if m:
+                    ip = m.groupdict()['ip']
+                    subnet = m.groupdict()['subnet_mask']
+                    network = {
+                        "ip": ip,
+                        "subnet_mask": subnet,
+                        "secondary": False,
+                    }
+                    dhcp_pools[pool_name]['networks'].append(network)
+
+                m = p_block_network_secondary.match(line)
+                if m:
+                    ip = m.groupdict()['ip']
+                    subnet = m.groupdict()['subnet_mask']
+                    secondary = True if m.groupdict()['secondary'] else False
+                    network = {
+                        "ip": ip,
+                        "subnet_mask": subnet,
+                        "secondary": secondary,
+                    }
+                    dhcp_pools[pool_name]['networks'].append(network)
+
+                m = p_block_options.match(line)
+                if m:
+                    option = m.groupdict()['option']
+                    type = m.groupdict()['type']
+                    data = m.groupdict()['data']
+                    option = {
+                        "option": option,
+                        "type": type,
+                        "data": data,
+                    }
+                    dhcp_pools[pool_name]['options'].append(option)
+                    
+                loeloe = "lala"
 
         for line in out.splitlines():
             line = line.strip()
@@ -217,7 +316,7 @@ dhcp_pools = [
 ]
             """
 
-    # work with this for regexes
+            # work with this for regexes
             """
 ip dhcp pool VWG-Baarn
  network 10.0.10.160 255.255.255.240
