@@ -2,6 +2,7 @@ import logging
 from genie.metaparser import MetaParser
 from genie.metaparser.util.schemaengine import Any, Optional
 import re
+from netaddr import AddrFormatError, IPAddress, IPNetwork
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,57 @@ one-gv-2595bk-41(config)#ip dhcp ?
 """
 
 
+def create_cidr_notation(subnet, mask):
+    try:
+        cidr = IPNetwork(f"{subnet}/{mask}").prefixlen
+        # ex:  10.0.0.0/24
+        return f"{subnet}/{cidr}"
+    except AddrFormatError:
+        return "0.0.0.0"
+
+
+def check_if_ip_in_network(ipaddress, network, subnet_mask):
+    cidr = create_cidr_notation(network, subnet_mask)
+    return IPAddress(ipaddress) in IPNetwork(cidr)
+
+
+def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
+    """
+    Used in: DHCP Pools
+    Example: ip dhcp excluded-address x.x.x.x x.x.x.x
+    two conditions:
+    exclude host:
+        check if ip is in range --> add in exclude address as start and end
+    exclude range
+        check if first is in range --> exit when not
+        if in range check, second --> if ok than add both to exclude address
+        as start and end address
+
+    If none matches return empty string
+    :param settings:
+    :return:
+    """
+    excluded_ip_addresses = {}
+
+    for exclude_address in exclude_addresses:
+        in_network = True
+        in_network = check_if_ip_in_network(
+            exclude_address,
+            subnet,
+            subnet_mask)
+        if not in_network:
+            break
+
+        if len(exclude_addresses) > 1:
+            excluded_ip_addresses = {'start': exclude_addresses[0],
+                                     'end': exclude_addresses[1]}
+        else:
+            excluded_ip_addresses = {'start': exclude_addresses[0],
+                                     'end': exclude_addresses[0]}
+
+    return excluded_ip_addresses
+
+
 class ShowRunDhcpSchema(MetaParser):
     schema = {
         "dhcp": {
@@ -80,6 +132,9 @@ class ShowRunDhcpSchema(MetaParser):
                 Any(): {
                     Optional("domain"): str,
                     Optional("gateway"): str,
+                    Optional("vrf"): str,
+                    Optional("netbios_name_servers"): list,
+                    Optional("dhcp_excludes"): list,
                     Optional("networks"): [{
                         Optional("ip"): str,
                         Optional("subnet_mask"): str,
@@ -89,7 +144,8 @@ class ShowRunDhcpSchema(MetaParser):
                         Optional("option"): str,
                         Optional("type"): str,
                         Optional("data"): str
-                    }]
+                    }],
+                    Optional("lease_time"): str
                 },
             },
         },
@@ -168,17 +224,13 @@ class ShowRunDhcp(ShowRunDhcpSchema):
 
         # note: can be multiples of below in a configuration
         # ex: ip dhcp excluded-address 10.0.11.0 10.0.11.2
-        p_get_dhcp_excluded = re.compile(
-            r"ip dhcp excluded-address ((?P<start_range>[0-9\.x]+))\s+(?P<end_range>[0-9\.x]+)")
-
-        # note: can be multiples of below in a configuration
         # ex: ip dhcp excluded-address vrf lala 10.0.11.0 10.0.11.2
-        p_get_dhcp_excluded_vrf = re.compile(
-            r"ip dhcp excluded-address (vrf (?P<vrf>.*?\s)(?P<start_range>[0-9\.x]+))\s+(?P<end_range>[0-9\.x]+)")
+        p_get_dhcp_excluded = re.compile(
+            r"^ip dhcp excluded-address (.*?)(?P<excludes>[0-9]+.*)$")
 
         # regex extraction patterns for inside a block
         # note that we stripped the ident space of it
-
+        #
         # ex:  domain-name Wijnen.local
         p_block_pool_name = re.compile(r"^ip dhcp pool (?P<pool_name>.*)$")
         p_block_domain = re.compile(r"^domain-name (?P<domain_name>.*$)")
@@ -214,11 +266,20 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         p_block_lease_time = re.compile(
             r"^lease\s+(?P<lease_options>infinite|.*)$")
 
-        get_dhcp_excluded = p_get_dhcp_excluded.findall(out)
-        get_dhcp_excluded_vrf = p_get_dhcp_excluded_vrf.findall(out)
-        get_dhcp_pool_blocks = p_get_dhcp_pool_blocks.findall(out)
+        # ex:  vrf my_first_vrf
+        p_block_vrf = re.compile(r"^vrf\s+(?P<vrf>.*)$")
 
         # try except for routers without pools
+        get_dhcp_pool_blocks = p_get_dhcp_pool_blocks.findall(out)
+
+        excludes_list = []
+        for line in out.splitlines():
+            line = line.strip()
+
+            m = p_get_dhcp_excluded.match(line)
+            if m:
+                excludes = m.groupdict()["excludes"]
+                excludes_list.append(excludes.split(" "))
 
         dhcp_pools = {}
         for block in get_dhcp_pool_blocks:
@@ -233,7 +294,7 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                     dhcp_pools[pool_name] = {}
                     dhcp_pools[pool_name]['networks'] = []
                     dhcp_pools[pool_name]['options'] = []
-
+                    dhcp_pools[pool_name]['dhcp_excludes'] = []
 
                 m = p_block_domain.match(line)
                 if m:
@@ -255,6 +316,17 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "secondary": False,
                     }
                     dhcp_pools[pool_name]['networks'].append(network)
+                    # make sure there are excludes otherwise useless
+                    if len(excludes_list) >= 1:
+                        for excluded in excludes_list:
+                            matched = extract_excluded_ip_address(
+                                excluded,
+                                network['ip'],
+                                network['subnet_mask'],
+                            )
+                            if matched:
+                                dhcp_pools[pool_name]['dhcp_excludes'].append(
+                                    matched)
 
                 m = p_block_network_secondary.match(line)
                 if m:
@@ -267,6 +339,17 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "secondary": secondary,
                     }
                     dhcp_pools[pool_name]['networks'].append(network)
+                    # make sure there are excludes otherwise useless
+                    if len(excludes_list) >= 1:
+                        for excluded in excludes_list:
+                            matched = extract_excluded_ip_address(
+                                excluded,
+                                network['ip'],
+                                network['subnet_mask'],
+                            )
+                            if matched:
+                                dhcp_pools[pool_name]['dhcp_excludes'].append(
+                                    matched)
 
                 m = p_block_options.match(line)
                 if m:
@@ -279,119 +362,23 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "data": data,
                     }
                     dhcp_pools[pool_name]['options'].append(option)
-                    
-                loeloe = "lala"
 
-        for line in out.splitlines():
-            line = line.strip()
+                m = p_block_netbios_servers.match(line)
+                if m:
+                    # perhaps we dont need to split.
+                    # but then its a not a nice list
+                    _ = m.groupdict()['netbios_servers']
+                    netbios_servers = _.split(" ")
+                    dhcp_pools[pool_name]['netbios_servers'] = netbios_servers
 
-            # not syure if needed
-            """
-            \nip dhcp pool SUVM1202\n network 130.1.41.0 255.255.255.0\n default-router 130.1.41.253 \n option 186 ip 172.24.1.2 \n option 190 hex 01bb\n option 161 ascii "172.24.1.2"\n option
- 162 ascii "/"\n option 184 ascii "wdmserverrapport"\n option 185 ascii "DellWyse"\n
+                m = p_block_lease_time.match(line)
+                if m:
+                    lease_time = m.groupdict()['lease_options']
+                    dhcp_pools[pool_name]['lease_time'] = lease_time
 
+                m = p_block_vrf.match(line)
+                if m:
+                    vrf = m.groupdict()['vrf']
+                    dhcp_pools[pool_name]['vrf'] = vrf
 
-dhcp_pools = [
-   {
-      "pool_name":"ONE-1",
-      "domain":"nelis.nl",
-      "excluded_ip_addresses":[
-         
-      ],
-      "gateway":"None",
-      "network":{
-         "ip":"None",
-         "subnet_mask":"None"
-      },
-      "dns":[
-         "10.1.1.99"
-      ],
-      "netbios":[
-         "10.1.1.101"
-      ],
-      "tftp":[
-         "10.1.1.100"
-      ]
-   }
-]
-            """
-
-            # work with this for regexes
-            """
-ip dhcp pool VWG-Baarn
- network 10.0.10.160 255.255.255.240
- network 10.0.10.160 255.255.255.240 secondary
- default-router 10.0.10.161 
- override default-router 10.0.10.161 
- dns-server 172.16.1.21 172.16.1.27 
- domain-name Wijnen.local
- netbios-name-server 172.16.1.21 
- option 43 hex f10c.ac10.03fd.ac10.03fc.ac10.03fb
- option 60 ascii Cisco AP c1142
- import all
- update arp
- relay destination 10.1.1.1  dest en source
-!
-ip dhcp pool VLAN102
- network 10.184.80.0 255.255.254.0
- bootfile linux.0
- option 201 ascii '10.80.3.33' '40003'
- next-server 10.184.80.50 
- default-router 10.184.81.254 
- netbios-name-server 10.184.80.50 
- option 66 ip 10.184.80.50 
- dns-server 10.244.52.106 10.244.52.107 
- domain-name HPDM-AMF
- option 150 ip 10.184.80.50 
- lease 0 0 30 ? wat zijn de opties
- lease 30 ?wat is dit
- netbios-node-type h-node
- option 43 ascii id:ipphone.mitel.com;call_srv=145.54.138.146;vlan=40;l2p=6;dscp=46;sw_tftp
-=145.54.138.146
-!
-ip dhcp pool VLAN100
- network 10.24.124.0 255.255.254.0
- bootfile Boot▒\wdsnbp.com
- default-router 10.24.125.254 
- dns-server 10.24.99.51 10.24.99.52 
- netbios-name-server 10.24.99.51 10.24.99.52 
- netbios-node-type h-node
- option 242 ascii "L2Q=1,L2QVLAN=200"
- lease 0 0 30
- option 43 hex  10a.5369.656d.656e.7300.0000.0204.0000.0258.0317.7364.6c70.3a2f.2f31.3732.2e31.372e.302e.323a.3138.3434.33ff
-!
-ip dhcp pool CONTENTGURU-(CGR)
- 
-!
-ip dhcp pool SUVM1202
- network 130.1.41.0 255.255.255.0
- default-router 130.1.41.253 
- option 186 ip 172.24.1.2 
- option 190 hex 01bb
- option 161 ascii "172.24.1.2"
- option 162 ascii "/"
- option 184 ascii "wdmserverrapport"
- option 185 ascii "DellWyse"
-!v
-ip dhcp bootp ignore 
-ip dhcp snooping information option allow-untrusted
-ip dhcp use vrf remote
-ip dhcp use vrf connected
-!
-no service dhcp
-!
-ip dhp excluded-address 10.11.25.51 10.11.25.52
-ip dhp excluded-address vrf lola 10.11.25.51 10.11.25.52  geen end range? wat dan?
-            """
-
-            # small huawei example
-            """
-            #
-ip pool dhcppool-vlan10
- gateway-list 172.29.87.25
- network 172.29.87.0 mask 255.255.255.0
- excluded-ip-address 172.29.87.11 172.29.87.24
- excluded-ip-address 172.29.87.26 172.29.87.254
- conflict auto-recycle interval day 0 hour 0 minute 5
- #
-            """
+        loeloe = "lala"
