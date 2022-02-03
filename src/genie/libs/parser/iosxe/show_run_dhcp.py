@@ -6,71 +6,6 @@ from netaddr import AddrFormatError, IPAddress, IPNetwork
 
 logger = logging.getLogger(__name__)
 
-# all cisco options
-"""
-one-gv-2595bk-41(config)#ip dhcp pool lol 
-one-gv-2595bk-41(dhcp-config)#?
-DHCP pool configuration commands:
-  accounting           Send Accounting Start/Stop messages
-  address              Configure a reserved address
-  authorization        Obtain address allocation information from AAA
-  bootfile             Boot file name
-  class                Specify a DHCP class
-  client-identifier    Client identifier
-  client-name          Client name
-  default-router       Default routers
-  dns-server           DNS servers
-  domain-name          Domain name
-  exit                 Exit from DHCP pool configuration mode
-  hardware-address     Client hardware address
-  host                 Client IP address and mask
-  import               Programatically importing DHCP option parameters
-  lease                Address lease time
-  netbios-name-server  NetBIOS (WINS) name servers
-  netbios-node-type    NetBIOS node type
-  network              Network number and mask
-  next-server          Next server in boot process
-  no                   Negate a command or set its defaults
-  option               Raw DHCP options
-  origin               Configure the origin of the pool
-  relay                Function as a DHCP relay
-  remember             Remember released bindings
-  renew                Configure renewal policy
-  reserved-only        Only allocate reserved addresses
-  server               Configure the server ID option value
-  subnet               Subnet allocation commands
-  update               Dynamic updates
-  utilization          Configure various utilization parameters
-  vrf                  Associate this pool with a VRF
-
-one-gv-2595bk-41(dhcp-config)#exit
-one-gv-2595bk-41(config)#ip dhc
-one-gv-2595bk-41(config)#ip dhcp ?
-  aaa                        Configure aaa attributes
-  auto-broadcast             Configure auto broadcast feature
-  binding                    DHCP address bindings
-  bootp                      BOOTP specific configuration
-  class                      Configure DHCP classes
-  compatibility              Compatibility configuration
-  conflict                   DHCP address conflict parameters
-  database                   Configure DHCP database agents
-  drop-inform                Drop inform message if enabled
-  excluded-address           Prevent DHCP from assigning certain addresses
-  global-options             Configure global DHCP options
-  limit                      Limit DHCP Lease
-  limited-broadcast-address  Use all 1's broadcast address
-  ping                       Specify ping parameters used by DHCP
-  pool                       Configure DHCP address pools
-  relay                      DHCP relay agent parameters
-  remember                   Remember released bindings
-  route                      Specify the type of routes for clients on unnumbered interfaces
-  smart-relay                Enable Smart Relay feature
-  subscriber-id              Global subscriber-id configuration
-  support                    Configure support for certain features
-  update                     Configure dynamic updates
-  use                        Configure use of certain parameters during allocation
-"""
-
 
 def create_cidr_notation(subnet, mask):
     try:
@@ -105,7 +40,6 @@ def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
     excluded_ip_addresses = {}
 
     for exclude_address in exclude_addresses:
-        in_network = True
         in_network = check_if_ip_in_network(
             exclude_address,
             subnet,
@@ -125,29 +59,32 @@ def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
 
 class ShowRunDhcpSchema(MetaParser):
     schema = {
-        "dhcp": {
-            Optional("global_settings"): {
-            },
-            Optional("dhcp_pools"): {
-                Any(): {
-                    Optional("domain"): str,
-                    Optional("gateway"): str,
-                    Optional("vrf"): str,
-                    Optional("netbios_name_servers"): list,
-                    Optional("dhcp_excludes"): list,
-                    Optional("networks"): [{
-                        Optional("ip"): str,
-                        Optional("subnet_mask"): str,
-                        Optional("secundary"): bool,
-                    }],
-                    Optional("dhcp_options"): [{
-                        Optional("option"): str,
-                        Optional("type"): str,
-                        Optional("data"): str
-                    }],
-                    Optional("lease_time"): str
-                },
-            },
+        Any(): {
+            Optional("domain"): str,
+            Optional("gateway"): str,
+            Optional("vrf"): str,
+            Optional("netbios_servers"): list,
+            Optional("dhcp_excludes"): list[
+                {
+                    Optional('end'): str,
+                    Optional('start'): str,
+                }
+            ],
+            Optional("networks"): list[
+                {
+                    Optional('ip'): str,
+                    Optional('subnet_mask'): str,
+                    Optional('secondary'): bool,
+                }
+            ],
+            Optional("dhcp_options"): list[
+                {
+                    Optional("option"): str,
+                    Optional("type"): str,
+                    Optional("data"): str,
+                }
+            ],
+            Optional("lease_time"): str,
         },
     }
 
@@ -212,8 +149,6 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         real_cmd = "show running-config"
         out = self.device.execute(real_cmd) if output is None else output
 
-        dhcp = {}
-
         # below regex extracts blocks op dhcp pools until the ! char:
         # !
         # ip dhcp pool hatseflats-2
@@ -272,67 +207,46 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         # try except for routers without pools
         get_dhcp_pool_blocks = p_get_dhcp_pool_blocks.findall(out)
 
+        dhcp_pools = {}
         excludes_list = []
         for line in out.splitlines():
             line = line.strip()
 
-            m = p_get_dhcp_excluded.match(line)
-            if m:
+            if m := p_get_dhcp_excluded.match(line):
                 excludes = m.groupdict()["excludes"]
                 excludes_list.append(excludes.split(" "))
 
-        dhcp_pools = {}
         for block in get_dhcp_pool_blocks:
             for line in block.splitlines():
                 line = line.strip()
 
-                m = p_block_pool_name.match(line)
-                if m:
+                if m := p_block_pool_name.match(line):
                     pool_name = m.groupdict()['pool_name']
                     # the name of the pool defines the dict
                     # we also setup the structure
-                    dhcp_pools[pool_name] = {}
-                    dhcp_pools[pool_name]['networks'] = []
-                    dhcp_pools[pool_name]['options'] = []
-                    dhcp_pools[pool_name]['dhcp_excludes'] = []
+                    dhcp_pools[pool_name] = {'networks': [],
+                                             'dhcp_options': [],
+                                             'dhcp_excludes': []
+                                             }
 
-                m = p_block_domain.match(line)
-                if m:
+                if m := p_block_domain.match(line):
                     domain_name = m.groupdict()['domain_name']
                     dhcp_pools[pool_name]['domain'] = domain_name
 
-                m = p_block_gateway.match(line)
-                if m:
+                if m := p_block_gateway.match(line):
                     gateway = m.groupdict()['gateway']
                     dhcp_pools[pool_name]['gateway'] = gateway
 
-                m = p_block_network.match(line)
+                # reset m cause below ones look in global statements
+                m = None
+                if m_network := p_block_network.match(line):
+                    m = m_network
+                if m_secondary := p_block_network_secondary.match(line):
+                    m = m_secondary
                 if m:
                     ip = m.groupdict()['ip']
                     subnet = m.groupdict()['subnet_mask']
-                    network = {
-                        "ip": ip,
-                        "subnet_mask": subnet,
-                        "secondary": False,
-                    }
-                    dhcp_pools[pool_name]['networks'].append(network)
-                    # make sure there are excludes otherwise useless
-                    if len(excludes_list) >= 1:
-                        for excluded in excludes_list:
-                            matched = extract_excluded_ip_address(
-                                excluded,
-                                network['ip'],
-                                network['subnet_mask'],
-                            )
-                            if matched:
-                                dhcp_pools[pool_name]['dhcp_excludes'].append(
-                                    matched)
-
-                m = p_block_network_secondary.match(line)
-                if m:
-                    ip = m.groupdict()['ip']
-                    subnet = m.groupdict()['subnet_mask']
-                    secondary = True if m.groupdict()['secondary'] else False
+                    secondary = bool(m.groupdict().get("secondary"))
                     network = {
                         "ip": ip,
                         "subnet_mask": subnet,
@@ -340,19 +254,17 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                     }
                     dhcp_pools[pool_name]['networks'].append(network)
                     # make sure there are excludes otherwise useless
-                    if len(excludes_list) >= 1:
+                    if excludes_list:
                         for excluded in excludes_list:
-                            matched = extract_excluded_ip_address(
-                                excluded,
-                                network['ip'],
-                                network['subnet_mask'],
-                            )
-                            if matched:
+                            if matched := extract_excluded_ip_address(
+                                    excluded,
+                                    network['ip'],
+                                    network['subnet_mask'],
+                            ):
                                 dhcp_pools[pool_name]['dhcp_excludes'].append(
                                     matched)
 
-                m = p_block_options.match(line)
-                if m:
+                if m := p_block_options.match(line):
                     option = m.groupdict()['option']
                     type = m.groupdict()['type']
                     data = m.groupdict()['data']
@@ -361,24 +273,22 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "type": type,
                         "data": data,
                     }
-                    dhcp_pools[pool_name]['options'].append(option)
+                    dhcp_pools[pool_name]['dhcp_options'].append(option)
 
-                m = p_block_netbios_servers.match(line)
-                if m:
+                if m := p_block_netbios_servers.match(line):
                     # perhaps we dont need to split.
                     # but then its a not a nice list
                     _ = m.groupdict()['netbios_servers']
                     netbios_servers = _.split(" ")
                     dhcp_pools[pool_name]['netbios_servers'] = netbios_servers
 
-                m = p_block_lease_time.match(line)
-                if m:
+                if m := p_block_lease_time.match(line):
                     lease_time = m.groupdict()['lease_options']
                     dhcp_pools[pool_name]['lease_time'] = lease_time
 
-                m = p_block_vrf.match(line)
-                if m:
+                if m := p_block_vrf.match(line):
                     vrf = m.groupdict()['vrf']
                     dhcp_pools[pool_name]['vrf'] = vrf
 
-        loeloe = "lala"
+        logging.debug(dhcp_pools)
+        return dhcp_pools
