@@ -164,7 +164,8 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         for line in out.splitlines():
             line = line.strip()
 
-            if m := p_get_dhcp_excluded.match(line):
+            m = p_get_dhcp_excluded.match(line)
+            if m:
                 excludes = m.groupdict()["excludes"]
                 excludes_list.append(excludes.split(" "))
 
