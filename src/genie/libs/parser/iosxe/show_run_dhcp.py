@@ -96,54 +96,6 @@ class ShowRunDhcp(ShowRunDhcpSchema):
     # the real command we will run is show running-config.
     cli_command = "show running-config dhcp"
 
-    # SEVERAL DIFFERENT REAL WORLD EXAMPLES
-    """
-    no ip dhcp conflict logging
-    !
-    ip dhcp pool BGB00045-0
-     network 172.16.1.0 255.255.255.0
-    !
-    ip dhcp pool hatseflats-1
-     network 172.16.2.0 255.255.255.0
-    !
-    ip dhcp excluded-address 10.0.11.0 10.0.11.2
-    !
-    ip dhcp pool ONE-1
-     network 10.0.11.0 255.255.255.0
-     default-router 10.0.11.1 
-     domain-name dhcpdomein
-    !
-    """
-    # testing was done with below strings
-    """
-    no ip dhcp conflict logging
-    ip dhcp excluded-address 10.1.1.2 10.1.1.10
-    ip dhcp excluded-address vrf lala 10.2.2.0 10.2.2.244
-    !
-    ip dhcp pool hatseflats-1
-     network 172.16.2.0 255.255.255.0
-    !
-    ip dhcp pool hatseflats-2
-     network 172.16.3.0 255.255.255.0
-    !
-    ip dhcp pool ONE-1
-     domain-name nelis.nl
-     dns-server 10.1.1.99 
-     option 150 ip 10.1.1.100 
-     netbios-name-server 10.1.1.101 
-     netbios-node-type h-node
-    !
-    !
-    ip dhcp excluded-address 10.0.11.0 10.0.11.2
-    !
-    ip dhcp pool ONE-1
-     network 10.0.11.0 255.255.255.0
-     default-router 10.0.11.1 
-     option 150 ip 3.3.3.3 4.4.4.4
-     domain-name dhcpdomein
-    !
-    !\r\nip dhcp pool hatseflats-1\r\n network 172.16.2.0 255.255.255.0\r\n!
-    """
 
     def cli(self, output=None):
         real_cmd = "show running-config"
@@ -220,7 +172,8 @@ class ShowRunDhcp(ShowRunDhcpSchema):
             for line in block.splitlines():
                 line = line.strip()
 
-                if m := p_block_pool_name.match(line):
+                m = p_block_pool_name.match(line)
+                if m:
                     pool_name = m.groupdict()['pool_name']
                     # the name of the pool defines the dict
                     # we also setup the structure
@@ -229,19 +182,23 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                                              'dhcp_excludes': []
                                              }
 
-                if m := p_block_domain.match(line):
+                m = p_block_domain.match(line)
+                if m:
                     domain_name = m.groupdict()['domain_name']
                     dhcp_pools[pool_name]['domain'] = domain_name
 
-                if m := p_block_gateway.match(line):
+                m = p_block_gateway.match(line)
+                if m:
                     gateway = m.groupdict()['gateway']
                     dhcp_pools[pool_name]['gateway'] = gateway
 
                 # reset m cause below ones look in global statements
                 m = None
-                if m_network := p_block_network.match(line):
+                m_network = p_block_network.match(line)
+                if m_network:
                     m = m_network
-                if m_secondary := p_block_network_secondary.match(line):
+                m_secondary = p_block_network_secondary.match(line)
+                if m_secondary:
                     m = m_secondary
                 if m:
                     ip = m.groupdict()['ip']
@@ -264,7 +221,8 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                                 dhcp_pools[pool_name]['dhcp_excludes'].append(
                                     matched)
 
-                if m := p_block_options.match(line):
+                m = p_block_options.match(line)
+                if m:
                     option = m.groupdict()['option']
                     type = m.groupdict()['type']
                     data = m.groupdict()['data']
@@ -275,18 +233,21 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                     }
                     dhcp_pools[pool_name]['dhcp_options'].append(option)
 
-                if m := p_block_netbios_servers.match(line):
+                m = p_block_netbios_servers.match(line)
+                if m:
                     # perhaps we dont need to split.
                     # but then its a not a nice list
                     _ = m.groupdict()['netbios_servers']
                     netbios_servers = _.split(" ")
                     dhcp_pools[pool_name]['netbios_servers'] = netbios_servers
 
-                if m := p_block_lease_time.match(line):
+                m = p_block_lease_time.match(line)
+                if m:
                     lease_time = m.groupdict()['lease_options']
                     dhcp_pools[pool_name]['lease_time'] = lease_time
 
-                if m := p_block_vrf.match(line):
+                m = p_block_vrf.match(line)
+                if m:
                     vrf = m.groupdict()['vrf']
                     dhcp_pools[pool_name]['vrf'] = vrf
 
