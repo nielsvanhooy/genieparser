@@ -64,26 +64,26 @@ class ShowRunDhcpSchema(MetaParser):
             Optional("gateway"): str,
             Optional("vrf"): str,
             Optional("netbios_servers"): list,
-            Optional("dhcp_excludes"): list[
-                {
+            Optional("dhcp_excludes"): {
+                Any(): {
                     Optional('end'): str,
                     Optional('start'): str,
                 }
-            ],
-            Optional("networks"): list[
-                {
+            },
+            Optional("networks"): {
+                Any(): {
                     Optional('ip'): str,
                     Optional('subnet_mask'): str,
                     Optional('secondary'): bool,
                 }
-            ],
-            Optional("dhcp_options"): list[
-                {
+            },
+            Optional("dhcp_options"): {
+                Any(): {
                     Optional("option"): str,
                     Optional("type"): str,
                     Optional("data"): str,
                 }
-            ],
+            },
             Optional("lease_time"): str,
         },
     }
@@ -95,7 +95,6 @@ class ShowRunDhcp(ShowRunDhcpSchema):
     # but that is not a good option. better to leverage python for that
     # the real command we will run is show running-config.
     cli_command = "show running-config dhcp"
-
 
     def cli(self, output=None):
         real_cmd = "show running-config"
@@ -170,17 +169,20 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                 excludes_list.append(excludes.split(" "))
 
         for block in get_dhcp_pool_blocks:
+            # set the indexes for nested dicts to 1 with every new block to parse
+            index_networks = 1
+            index_excluded = 1
+            index_options = 1
             for line in block.splitlines():
                 line = line.strip()
 
                 m = p_block_pool_name.match(line)
                 if m:
                     pool_name = m.groupdict()['pool_name']
-                    # the name of the pool defines the dict
-                    # we also setup the structure
-                    dhcp_pools[pool_name] = {'networks': [],
-                                             'dhcp_options': [],
-                                             'dhcp_excludes': []
+                    # setup nested items
+                    dhcp_pools[pool_name] = {'networks': {},
+                                             'dhcp_options': {},
+                                             'dhcp_excludes': {}
                                              }
 
                 m = p_block_domain.match(line)
@@ -210,17 +212,20 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "subnet_mask": subnet,
                         "secondary": secondary,
                     }
-                    dhcp_pools[pool_name]['networks'].append(network)
+                    dhcp_pools[pool_name]['networks'][index_networks] = network
+                    index_networks += 1
                     # make sure there are excludes otherwise useless
                     if excludes_list:
                         for excluded in excludes_list:
-                            if matched := extract_excluded_ip_address(
-                                    excluded,
-                                    network['ip'],
-                                    network['subnet_mask'],
-                            ):
-                                dhcp_pools[pool_name]['dhcp_excludes'].append(
-                                    matched)
+                            matched = extract_excluded_ip_address(
+                                excluded,
+                                network['ip'],
+                                network['subnet_mask'],
+                            )
+                            if matched:
+                                dhcp_pools[pool_name]['dhcp_excludes'][
+                                    index_excluded] = matched
+                                index_excluded += 1
 
                 m = p_block_options.match(line)
                 if m:
@@ -232,7 +237,8 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                         "type": type,
                         "data": data,
                     }
-                    dhcp_pools[pool_name]['dhcp_options'].append(option)
+                    dhcp_pools[pool_name]['dhcp_options'][index_options] = option
+                    index_options += 1
 
                 m = p_block_netbios_servers.match(line)
                 if m:
