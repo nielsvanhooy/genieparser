@@ -20,7 +20,10 @@ expected_output = {
         'dhcp_excludes': {
             1: {
                 'start': '12.1.1.10',
-                'end': '12.1.1.10'}},
+                'end': '12.1.1.10'},
+            2: {
+                'start': '12.1.1.12',
+                'end': '12.1.1.114'}},
         'vrf': 'lala',
         'domain': 'nelis.nl',
         'dns_servers': [
@@ -42,7 +45,9 @@ expected_output = {
         1: {'ip': '10.1.10.0', 'subnet_mask': '255.255.255.0',
             'secondary': False}}, 'dhcp_options': {
         1: {'option': '150', 'type': 'ip', 'data': '139.156.73.67'}},
-        'dhcp_excludes': {}, 'gateway': '10.1.10.1',
+        'dhcp_excludes': {1: {'start': '10.1.10.2',
+                              'end': '10.1.1.20'}},
+        'gateway': '10.1.10.1',
         'dns_servers': ['213.162.171.133',
                         '213.162.171.134']}, 'cxbeh': {
         'networks': {1: {'ip': '10.111.10.0', 'subnet_mask': '255.255.255.0',
@@ -95,5 +100,4 @@ expected_output = {
                 'type': 'ascii',
                 'data': '"DellWyse"'}},
         'dhcp_excludes': {},
-        'gateway': '130.1.41.253'}
-}
+        'gateway': '130.1.41.253'}}

@@ -21,7 +21,7 @@ def check_if_ip_in_network(ipaddress, network, subnet_mask):
     return IPAddress(ipaddress) in IPNetwork(cidr)
 
 
-def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
+def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask, block_vrf=None):
     """
     Used in: DHCP Pools
     Example: ip dhcp excluded-address x.x.x.x x.x.x.x
@@ -39,7 +39,15 @@ def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
     """
     excluded_ip_addresses = {}
 
-    for exclude_address in exclude_addresses:
+    for exclude_address in exclude_addresses['data']:
+        exclude_vrf = exclude_addresses.get('vrf', None)
+
+        if block_vrf is not None and exclude_vrf is None:
+            continue
+
+        if block_vrf and exclude_vrf is None:
+            continue
+
         in_network = check_if_ip_in_network(
             exclude_address,
             subnet,
@@ -47,12 +55,12 @@ def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask):
         if not in_network:
             break
 
-        if len(exclude_addresses) > 1:
-            excluded_ip_addresses = {'start': exclude_addresses[0],
-                                     'end': exclude_addresses[1]}
+        if len(exclude_addresses['data']) > 1:
+            excluded_ip_addresses = {'start': exclude_addresses['data'][0],
+                                     'end': exclude_addresses['data'][1]}
         else:
-            excluded_ip_addresses = {'start': exclude_addresses[0],
-                                     'end': exclude_addresses[0]}
+            excluded_ip_addresses = {'start': exclude_addresses['data'][0],
+                                     'end': exclude_addresses['data'][0]}
 
     return excluded_ip_addresses
 
@@ -115,6 +123,9 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         p_get_dhcp_excluded = re.compile(
             r"^ip dhcp excluded-address (.*?)(?P<excludes>[0-9]+.*)$")
 
+        p_get_dhcp_excluded_vrf = re.compile(
+            r"^ip dhcp excluded-address vrf (?P<vrf>.*?)(?=\s)(.*?)(?P<excludes>[0-9]+.*)$")
+
         # regex extraction patterns for inside a block
         # note that we stripped the ident space of it
         #
@@ -172,14 +183,25 @@ class ShowRunDhcp(ShowRunDhcpSchema):
             m = p_get_dhcp_excluded.match(line)
             if m:
                 excludes = m.groupdict()["excludes"]
-                excludes_list.append(excludes.split(" "))
+                excludes_list.append({
+                    "data": excludes.split(" ")
+                })
+
+            m = p_get_dhcp_excluded_vrf.match(line)
+            if m:
+                excludes = m.groupdict()["excludes"]
+                vrf = m.groupdict()['vrf']
+                excludes_list.append({
+                    "vrf": vrf,
+                    "data": excludes.split(" ")
+                })
 
         for block in get_dhcp_pool_blocks:
             # set the indexes for nested dicts to 1 with every new block to parse
             index_networks = 1
             index_excluded = 1
             index_options = 1
-            global_block_vrf = p_global_block_vrf.findall(block)
+            global_block_vrf = p_global_block_vrf.findall(block) or None
             for line in block.splitlines():
                 line = line.strip()
 
@@ -187,10 +209,11 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                 if m:
                     pool_name = m.groupdict()['pool_name']
                     # setup nested items
-                    dhcp_pools[pool_name] = {'networks': {},
-                                             'dhcp_options': {},
-                                             'dhcp_excludes': {}
-                                             }
+                    dhcp_pools[pool_name] = {
+                        'networks': {},
+                        'dhcp_options': {},
+                        'dhcp_excludes': {}
+                    }
 
                 m = p_block_domain.match(line)
                 if m:
@@ -228,6 +251,7 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                                 excluded,
                                 network['ip'],
                                 network['subnet_mask'],
+                                global_block_vrf
                             )
                             if matched:
                                 dhcp_pools[pool_name]['dhcp_excludes'][
