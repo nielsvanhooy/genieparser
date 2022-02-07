@@ -42,25 +42,24 @@ def extract_excluded_ip_address(exclude_addresses, subnet, subnet_mask, block_vr
     for exclude_address in exclude_addresses['data']:
         exclude_vrf = exclude_addresses.get('vrf', None)
 
-        if block_vrf is not None and exclude_vrf is None:
-            continue
+        # needs refactor.
+        # 2 cases:
+        #  - a pool with vrf statement should only match exclude statements with vrf
+        #  - a pool without vrf statement should only match exclude statements without vrf
+        if (block_vrf is not None and exclude_vrf is not None and exclude_vrf in block_vrf) or (block_vrf is None and exclude_vrf is None):
+            in_network = check_if_ip_in_network(
+                exclude_address,
+                subnet,
+                subnet_mask)
+            if not in_network:
+                break
 
-        if block_vrf and exclude_vrf is None:
-            continue
-
-        in_network = check_if_ip_in_network(
-            exclude_address,
-            subnet,
-            subnet_mask)
-        if not in_network:
-            break
-
-        if len(exclude_addresses['data']) > 1:
-            excluded_ip_addresses = {'start': exclude_addresses['data'][0],
-                                     'end': exclude_addresses['data'][1]}
-        else:
-            excluded_ip_addresses = {'start': exclude_addresses['data'][0],
-                                     'end': exclude_addresses['data'][0]}
+            if len(exclude_addresses['data']) > 1:
+                excluded_ip_addresses = {'start': exclude_addresses['data'][0],
+                                         'end': exclude_addresses['data'][1]}
+            else:
+                excluded_ip_addresses = {'start': exclude_addresses['data'][0],
+                                         'end': exclude_addresses['data'][0]}
 
     return excluded_ip_addresses
 
