@@ -9,9 +9,4 @@ policy-map TEST
   set precedence 4
  class class-default
   set precedence 5
- class class-default
-  bandwidth remaining percent 29
-  random_detect dscp-based
-  set ip dscp default
-  set precedence 5
 !

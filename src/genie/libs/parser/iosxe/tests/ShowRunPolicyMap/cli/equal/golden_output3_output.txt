@@ -1,0 +1,24 @@
+policy-map policy-cbwfq-1
+ class class-gold
+  bandwidth remaining percent 40 
+  random-detect dscp-based
+  random-detect ecn
+ class class-silver
+  bandwidth remaining percent 20 
+  random-detect dscp-based
+  random-detect ecn
+ class class-bronze
+  bandwidth remaining percent 10 
+  random-detect dscp-based
+  random-detect ecn
+ class management-traffic
+  bandwidth remaining percent 1 
+  random-detect dscp-based
+  random-detect ecn
+  set ip dscp af21
+ class class-default
+  bandwidth remaining percent 29 
+  random-detect dscp-based
+  random-detect ecn
+  set ip dscp default
+!
