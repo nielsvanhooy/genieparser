@@ -52,6 +52,7 @@ class ShowRunPolicyMapSchema(MetaParser):
                         Optional('service_policy'): str,
                         Optional('service_policy_input'): str,
                         Optional('service_policy_output'): str,
+                        Optional('random_detect'): list,
                     },
                 }
             },
@@ -110,7 +111,8 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
         p4 = re.compile(r'^set +qos-group +(?P<qos_group>(\w+))$')
 
         # bandwidth percent 25
-        p5 = re.compile(r'^bandwidth percent +(?P<bandwidth_percent>(\d+))$')
+        # bandwidth remaining percent
+        p5 = re.compile(r'^(bandwidth|bandwidth remaining) percent +(?P<bandwidth_percent>(\d+))$')
 
         # priority level 2
         p6_1 = re.compile(r'^priority +level +(?P<priority_level>(\d+))$')
@@ -123,15 +125,18 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
 
         # set dscp ef
         # set dscp 46
-        p8 = re.compile(r'^set +dscp +(?P<dscp>(\w+))$')
+        p8 = re.compile(r'^(set|set ip) +dscp +(?P<dscp>(\w+))$')
 
         # set cos 0
         p9 = re.compile(r'^set +cos +(?P<cos>(\d+))$')
 
+        #   random-detect dscp-based
+        #   random-detect ecn
+        p10 = re.compile(r'^random-detect (?P<random_detect>.*)$')
+
         for line in out.splitlines():
 
             line = line.strip()
-
             # policy-map L3VPN-out_child
             m = p1_1.match(line)
             if m:
@@ -144,6 +149,9 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
             # class ARP_in
             m = p1_2.match(line)
             if m:
+                # every "class" can have random_detect information
+                # so with each new class new we set a new list
+                random_detect_list = []
                 group = m.groupdict()
                 class_name = m.groupdict()['class_name']
                 if 'class' not in config_dict['policy_map']:
@@ -282,6 +290,13 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
                     ['qos_set'].update(
                         {k: v for k, v in group.items() if v})
                 continue
+
+            m = p10.match(line)
+            if m:
+                random_detect = m.groupdict()['random_detect']
+                random_detect_list.append(random_detect)
+                config_dict['policy_map'][policy_map]['class'][class_name]\
+                ['random_detect'] = random_detect_list
 
         return config_dict
 
