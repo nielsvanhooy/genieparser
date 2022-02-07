@@ -64,6 +64,7 @@ class ShowRunDhcpSchema(MetaParser):
             Optional("gateway"): str,
             Optional("vrf"): str,
             Optional("netbios_servers"): list,
+            Optional("dns_servers"): list,
             Optional("dhcp_excludes"): {
                 Any(): {
                     Optional('end'): str,
@@ -145,6 +146,8 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         # ex:  netbios-name-server 172.16.1.21 172.14.9.2
         p_block_netbios_servers = re.compile(
             r"^netbios-name-server\s(?P<netbios_servers>.*)$")
+
+        p_block_dns_servers = re.compile(r"^dns-server\s(?P<dns_servers>.*)$")
 
         # lease can be in format: lease 0, lease 0 0, lease 0 0 0
         # where the zero can be a number. in format hour minute second
@@ -247,6 +250,14 @@ class ShowRunDhcp(ShowRunDhcpSchema):
                     _ = m.groupdict()['netbios_servers']
                     netbios_servers = _.split(" ")
                     dhcp_pools[pool_name]['netbios_servers'] = netbios_servers
+
+                m = p_block_dns_servers.match(line)
+                if m:
+                    # perhaps we dont need to split.
+                    # but then its a not a nice list
+                    _ = m.groupdict()['dns_servers']
+                    dns_servers = _.split(" ")
+                    dhcp_pools[pool_name]['dns_servers'] = dns_servers
 
                 m = p_block_lease_time.match(line)
                 if m:
