@@ -155,6 +155,9 @@ class ShowRunDhcp(ShowRunDhcpSchema):
         p_block_lease_time = re.compile(
             r"^lease\s+(?P<lease_options>infinite|.*)$")
 
+        # needed to match the excluded range to vrf
+        p_global_block_vrf = re.compile(r"vrf\s+(?P<vrf>.*?(?=\s))")
+
         # ex:  vrf my_first_vrf
         p_block_vrf = re.compile(r"^vrf\s+(?P<vrf>.*)$")
 
@@ -176,6 +179,7 @@ class ShowRunDhcp(ShowRunDhcpSchema):
             index_networks = 1
             index_excluded = 1
             index_options = 1
+            global_block_vrf = p_global_block_vrf.findall(block)
             for line in block.splitlines():
                 line = line.strip()
 
