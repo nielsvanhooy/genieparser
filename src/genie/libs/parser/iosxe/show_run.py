@@ -439,7 +439,7 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("encryption_level"): str,
                         Optional("fhrp_description"): str,
                         Optional("group_id"): str,
-                        Optional("ips"): list,
+                        Optional("ips"): str,
                         Optional("learn"): bool,
                         Optional("preempt"): bool,
                         Optional("priority"): str,
@@ -738,16 +738,21 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # duplex full/duplex half
         p82 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
 
+        p_find_fhrp = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
+
+        # standby 20 authentication cisco
+        p_fhrp_authentication_plain = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication\s+(?P<encryption_string>\w+)$")
+
         # vrrp 100 authentication md5 key-string 7 070C285F4D06
-        p_fhrp_authentication = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
+        p_fhrp_authentication_key_string = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
 
         # vrrp 100 ip 1.1.1.2
         # standby 100 ip 1.1.1.2
-        p_fhrp_ips = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+ip\s+(?P<ips>.*)$")
+        p_fhrp_ips = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(ip|ipv4)\s+(?P<ips>.*)$")
 
         # vrrp 100 description hatseflats
         # standby 100 description hatseflats
-        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(?P<description>.*)$")
+        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+description(?P<description>.*)$")
 
         # vrrp 100 priority 90
         # standby 100 priority 90
@@ -776,6 +781,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 interface = m.groupdict()['interface']
                 intf_dict = config_dict.setdefault('interfaces', {})\
                                        .setdefault(interface, {})
+
+                # set the fhrps default dict. and set new one on new interface.
+                intf_dict.setdefault('fhrps', {})
+                intf_dict.setdefault('acl', {})
                 continue
 
             # description ISE Controlled Port
@@ -1349,21 +1358,18 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             # ip access-group DELETE_ME in ; ip access-group TEST-OUT out
             m = p72.match(line)
             if m:
-                intf_dict['acl'] = {}
                 group = m.groupdict()
                 if group['direction'] == 'in':
-                    inbound_dict = {'inbound': {
+                    intf_dict['acl']['inbound'] = {
                         'acl_name': group['acl_name'],
-                        'direction': group['direction']},
+                        'direction': group['direction']
                     }
-                    intf_dict['acl'].update(inbound_dict)
 
                 elif group['direction'] == 'out':
-                    outbound_dict = {'outbound': {
+                    intf_dict['acl']['outbound'] = {
                         'acl_name': group['acl_name'],
-                        'direction': group['direction']},
+                        'direction': group['direction']
                     }
-                    intf_dict['acl'].update(outbound_dict)
 
             # lisp mobility 20_1_1_0-global-IPV4
             m = p73.match(line)
@@ -1428,6 +1434,98 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'port_duplex': group['port_duplex']})
+
+            m = p_find_fhrp.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict['fhrps'].get(group['group_id'], False):
+                    intf_dict['fhrps'].update({
+                            group['group_id']: {
+                                "group_id": group['group_id'],
+                            }
+                        })
+
+            m = p_fhrp_authentication_plain.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update(
+                    {
+                        "encryption_string": group['encryption_string']
+                    }
+                )
+                continue
+
+            m = p_fhrp_authentication_key_string.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update(
+                    {
+                        "encryption_level": group['encryption_level'],
+                        "encryption_string": group['encryption_string']
+                    }
+                )
+                continue
+
+            m = p_fhrp_ips.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "ips": group['ips']
+                })
+                continue
+
+            m = p_fhrp_description.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "fhrp_description": group['description']
+                })
+                continue
+
+            m = p_fhrp_priority.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "priority": group['priority']
+                })
+                continue
+
+            m = p_fhrp_timers.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "timers": group['timers']
+                })
+                continue
+
+            # we want to know if an interface disabled the default vrrp preempt.
+            # no vrrp 120 preempt
+            m = p_fhrp_no_preempt_vrrp.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "preempt": False
+                })
+                continue
+
+            # for hsrp it must be explicitly defined if preempt should be used
+            # standby 10 preempt
+            m = p_fhrp_preempt_hsrp.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "preempt": True
+                })
+                continue
+
+        # remove empty children like acl or hfrp if they are
+        # empty in the end keeping in mind that config_dict['interfaces'] has to exist to do that
+        if config_dict.get("interfaces", False):
+            for v in config_dict['interfaces'].values():
+                if not bool(v['fhrps']):
+                    del v['fhrps']
+                if not bool(v['acl']):
+                    del v['acl']
 
         return config_dict
 
