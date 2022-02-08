@@ -24,7 +24,7 @@ from genie.libs.parser.utils.common import Common
 #   * 'show run policy-map {name}'
 # ==================================================
 class ShowRunPolicyMapSchema(MetaParser):
-    
+
     schema = {
         'policy_map': {
             Any(): {
@@ -369,6 +369,8 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('load_interval'): str,
                 Optional('mab'): bool,
                 Optional('negotiation_auto'): bool,
+                Optional('port_speed'): str,
+                Optional('port_duplex'): str,
                 Optional('snmp_trap_link_status'): bool,
                 Optional('snmp_trap_mac_notification_change_added'): bool,
                 Optional('snmp_trap_mac_notification_change_removed'): bool,
@@ -387,25 +389,25 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('vrf'): str,
                 Optional('src_ip'): str,
                 Optional('tunnel_mode'): str,
-                Optional('tunnel_dst'):str,
-                Optional('autoroute_announce'):str,
-                Optional('autoroute_destination'):str,
-                Optional('tunnel_priority'):list,
-                Optional('tunnel_bandwidth'):int,
-                Optional('tunnel_path_option'):{
-                    Any():{
-                        Optional('path_type'):str,
-                        Optional('path_name'):str,
+                Optional('tunnel_dst'): str,
+                Optional('autoroute_announce'): str,
+                Optional('autoroute_destination'): str,
+                Optional('tunnel_priority'): list,
+                Optional('tunnel_bandwidth'): int,
+                Optional('tunnel_path_option'): {
+                    Any(): {
+                        Optional('path_type'): str,
+                        Optional('path_name'): str,
                     },
                 },
-                Optional('mpls_ip'):str,
+                Optional('mpls_ip'): str,
                 Optional('channel_group'): {
-                        'chg': int,
-                        'mode': str,
+                    'chg': int,
+                    'mode': str,
                 },
                 Optional('power_inline'): {
-                        Optional('state'): str,
-                        Optional('max_watts'): str,
+                    Optional('state'): str,
+                    Optional('max_watts'): str,
                 },
                 Optional('power_inline_port_priority'): str,
                 Optional('flow_monitor_input'): str,
@@ -415,21 +417,36 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('ip_dhcp_snooping_trust'): bool,
                 Optional('ip_arp_inspection_trust'): bool,
                 Optional('lisp_mobility'): str,
-                Optional('mac_address_sticky'):str,
-                Optional('source_template'):str,
+                Optional('mac_address_sticky'): str,
+                Optional('source_template'): str,
                 Optional('host_reachability_protocol'): str,
                 Optional('source_interface'): str,
                 Optional('member_vni'): {
-                    Any():
-                         {Optional('vrf'): str,
-                          Optional('ingress_replication'): {
-                              'enabled': bool,
-                              Optional('remote_peer_ip'): str,
-                          },
-                          Optional('mcast_group'): str,
-                          Optional('local_routing'): bool
-                          }
-                     },
+                    Any(): {
+                        Optional('vrf'): str,
+                        Optional('ingress_replication'): {
+                            'enabled': bool,
+                            Optional('remote_peer_ip'): str,
+                        },
+                        Optional('mcast_group'): str,
+                        Optional('local_routing'): bool
+                    }
+                },
+                Optional('media_type'): str,
+                Optional('fhrps'): {
+                    Any(): {
+                        Optional("encryption_string"): str,
+                        Optional("encryption_level"): str,
+                        Optional("fhrp_description"): str,
+                        Optional("group_id"): str,
+                        Optional("ips"): list,
+                        Optional("learn"): bool,
+                        Optional("preempt"): bool,
+                        Optional("priority"): str,
+                        Optional("protocol"): str,
+                        Optional("timers"): str,
+                    }
+                }
             }
         }
     }
@@ -626,7 +643,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # ip arp inspection trust
         p51 = re.compile(r'^ip +arp +inspection +trust$')
 
-        #ip unnumbered Loopback0
+        # ip unnumbered Loopback0
         p52 = re.compile(r'^ip unnumbered (?P<src_address>\S+)$')
 
         # tunnel mode mpls traffic-eng
@@ -712,6 +729,44 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         #device-tracking attach-policy IPDT_POLICY
         p79 = re.compile(r'^device-tracking\sattach-policy\s+(?P<device_tracking_attach_policy>\S+)$')
 
+        # media-type rj45
+        p80 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
+
+        # speed 10 / speed 100/ speed1000
+        p81 = re.compile(r'^speed\s+(?P<port_speed>\d+)$')
+
+        # duplex full/duplex half
+        p82 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
+
+        # vrrp 100 authentication md5 key-string 7 070C285F4D06
+        p_fhrp_authentication = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
+
+        # vrrp 100 ip 1.1.1.2
+        # standby 100 ip 1.1.1.2
+        p_fhrp_ips = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+ip\s+(?P<ips>.*)$")
+
+        # vrrp 100 description hatseflats
+        # standby 100 description hatseflats
+        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(?P<description>.*)$")
+
+        # vrrp 100 priority 90
+        # standby 100 priority 90
+        p_fhrp_priority = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+priority\s(?P<priority>\d+)$")
+
+        # we are only interested in the last part.
+        # because the variability is immense in production networks
+        #  vrrp 110 timers advertise msec 50
+        #  vrrp 110 timers learn
+        p_fhrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+timers.*?((?=learn)|(?=\d+))(?P<timers>.*)$")
+
+        # we want to know if an interface disabled the default vrrp preempt.
+        # no vrrp 120 preempt
+        p_fhrp_no_preempt_vrrp = re.compile(r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt$")
+
+        # and for hsrp it must be explicitly defined if preempt should be used
+        # standby 10 preempt
+        p_fhrp_preempt_hsrp = re.compile(r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt$")
+
         for line in output.splitlines():
             line = line.strip()
 
@@ -722,14 +777,14 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict = config_dict.setdefault('interfaces', {})\
                                        .setdefault(interface, {})
                 continue
-            
+
             # description ISE Controlled Port
             m = p2.match(line)
             if m:
                 description = m.groupdict()['description']
                 intf_dict.update({'description': description})
                 continue
-            
+
             # vrf forwarding Mgmt-intf
             m = p3.match(line)
             if m:
@@ -813,7 +868,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 group = m.groupdict()
                 intf_dict.update({'switchport_mode': group['switchport_mode']})
                 continue
-            
+
             # switchport nonegotiate
             m = p14.match(line)
             if m:
@@ -821,7 +876,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update(
                     {'switchport_nonegotiate': group['nonegotiate']})
                 continue
-            
+
             # ip arp inspection limit rate 1024
             m = p15.match(line)
             if m:
@@ -836,7 +891,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 group = m.groupdict()
                 intf_dict.update({'load_interval': group['load_interval']})
                 continue
-            
+
             # authentication control-direction
             m = p17.match(line)
             if m:
@@ -1066,7 +1121,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                                     'state': group['state']},
                                     })
                 continue
-            
+
             # spanning-tree bpdufilter enable
             m = p44.match(line)
             if m:
@@ -1131,41 +1186,41 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 group = m.groupdict()
                 intf_dict.update({'src_ip':group['src_address']})
                 continue
-                
+
             # tunnel mode mpls traffic-eng
             m = p53.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'tunnel_mode':group['tunnel_mode']})
                 continue
-            
+
             #tunnel destination 2.2.2.2
             m = p54.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'tunnel_dst':group['tunnel_dst']})
                 continue
-                
-            if "autoroute announce" in line:
-                intf_dict.update({'autoroute_announce':'enabled'}) 
-            if "autoroute destination" in line:
-                intf_dict.update({'autoroute_destination':'enabled'}) 
 
-                
+            if "autoroute announce" in line:
+                intf_dict.update({'autoroute_announce':'enabled'})
+            if "autoroute destination" in line:
+                intf_dict.update({'autoroute_destination':'enabled'})
+
+
             #tunnel destination 2.2.2.2
             m = p55.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'tunnel_priority':[group['value']]})
                 continue
-                
+
             #tunnel mpls traffic-eng bandwidth 500
             m = p56.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'tunnel_bandwidth':int(group['value'])})
                 continue
-  
+
             # tunnel mpls traffic-eng path-option 1 dynamic
             m =p57.match(line)
             if m:
@@ -1176,8 +1231,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                     sub_dict.update({'path_type':group['path_type']})
                 else:
                     sub_dict.update({'path_type':'explicit'})
-                    sub_dict.update({'path_name':group['path_type']}) 
-                continue    
+                    sub_dict.update({'path_name':group['path_type']})
+                continue
 
             # mpls ip
             m = p58.match(line)
@@ -1301,16 +1356,14 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                         'acl_name': group['acl_name'],
                         'direction': group['direction']},
                     }
-                    continue
+                    intf_dict['acl'].update(inbound_dict)
 
                 elif group['direction'] == 'out':
                     outbound_dict = {'outbound': {
                         'acl_name': group['acl_name'],
                         'direction': group['direction']},
                     }
-
-                intf_dict['acl'].update(inbound_dict)
-                intf_dict['acl'].update(outbound_dict)
+                    intf_dict['acl'].update(outbound_dict)
 
             # lisp mobility 20_1_1_0-global-IPV4
             m = p73.match(line)
@@ -1346,7 +1399,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 group = m.groupdict()
                 intf_dict.update({'spanning_tree_portfast_trunk': True})
                 continue
-                
+
             #ipv6 nd raguard attach-policy Univ_IPv6_RA_Policy_Host
             m = p78.match(line)
             if m:
@@ -1360,6 +1413,21 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 group = m.groupdict()
                 intf_dict.update({'device_tracking_attach_policy': group['device_tracking_attach_policy']})
                 continue
+
+            m = p80.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'media_type': group['media_type']})
+
+            m = p81.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'port_speed': group['port_speed']})
+
+            m = p82.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'port_duplex': group['port_duplex']})
 
         return config_dict
 
@@ -1536,14 +1604,14 @@ class ShowRunMdnsSd(ShowRunMdnsSdSchema):
 
         # source-interface Vlan4030
         p22 = re.compile(r"^source-interface +Vlan(?P<src_intf>[\d]+)$")
-                
+
         # sdg-agent 4000:1:30::1
         # sdg-agent 40.1.21.1
         p23 = re.compile(r"^sdg-agent +(?P<agent_ip>([\d:.]+))$")
-        
+
         for line in out.splitlines():
             line = line.strip()
-            
+
             # mdns-sd gateway
             m = p0.match(line)
             if m:
@@ -1725,19 +1793,19 @@ class ShowRunMdnsSd(ShowRunMdnsSdSchema):
                 loc_grp_name.setdefault('intf', [])\
                             .append(Common.convert_intf_name(group['intf']))
                 continue
-            
+
             # source-interface Vlan4030
             m = p22.match(line)
             if m:
                 ret_dict['src_intf'] = m.groupdict()['src_intf']
                 continue
-                
+
             # sdg-agent 4000:1:30::1
             m = p23.match(line)
             if m:
                 ret_dict['agent_ip'] = m.groupdict()['agent_ip']
                 continue
-      
+
         return out_dict
 
 # ==================================================
@@ -1753,20 +1821,20 @@ class ShowRunAllSectionInterfaceSchema(MetaParser):
                 Optional('mvrp_timer_leave'): int,
                 Optional('mvrp_timer_join'): int,
                 Optional('mvrp_timer_periodic'): bool,
-                Optional('mvrp'):bool,
+                Optional('mvrp'): bool,
                 Optional('logging_event_link_status'): bool,
-                Optional('logging_event_trunk_status'):bool,
+                Optional('logging_event_trunk_status'): bool,
                 Optional('authentication_periodic'): bool,
                 Optional('authentication_port_control'): str,
                 Optional('authentication_timer_reauthenticate_server'): bool,
-                Optional('authentication_linksec_policy'):bool,
-                Optional('access_session_control_direction'):str,
+                Optional('authentication_linksec_policy'): bool,
+                Optional('access_session_control_direction'): str,
                 Optional('access_session_host_mode'): str,
                 Optional('access_session_closed'): bool,
                 Optional('carrier_delay'): int,
                 Optional('shutdown'): bool,
                 Optional('medium_p2p'): bool,
-                Optional('ip_access_group'):str,
+                Optional('ip_access_group'): str,
                 Optional('ip_arp_inspection_limit_rate'): str,
                 Optional('load_interval'): int,
                 Optional('negotiation_auto'): bool,
@@ -1776,16 +1844,16 @@ class ShowRunAllSectionInterfaceSchema(MetaParser):
                 Optional('cdp_tlv_server_location'): bool,
                 Optional('cdp_tlv_app'): bool,
                 Optional('ipv6_mld_snooping_tcn_flood'): bool,
-                Optional('switchport'):bool,
+                Optional('switchport'): bool,
                 Optional('switchport_access_vlan'): str,
-                Optional('switchport_trunk_allowed_all'):bool,
+                Optional('switchport_trunk_allowed_all'): bool,
                 Optional('switchport_mode'): str,
                 Optional('switchport_nonegotiate'): bool,
-                Optional('switchport_autostate_exclude'):bool,
+                Optional('switchport_autostate_exclude'): bool,
                 Optional('switchport_protected'): bool,
                 Optional('switchport_block_unicast'): bool,
                 Optional('switchport_block_multicast'): bool,
-                Optional('switchport_vepa_enabled'):bool,
+                Optional('switchport_vepa_enabled'): bool,
                 Optional('ip_arp_inspection_trust'): bool,
             }
         }
@@ -2413,7 +2481,8 @@ class ShowRunningConfigAAAUsername(ShowRunningConfigAAAUsernameSchema):
             if m:
                 group = m.groupdict()
                 username = group['username']
-                users_dict = ret_dict.setdefault('username', {}).setdefault(username, {})
+                users_dict = ret_dict.setdefault('username', {}).setdefault(username,
+                                                                            {})
                 users_dict['common_criteria_policy'] = group['common_criteria_policy']
                 pass_dict = users_dict.setdefault('password', {})
                 pass_dict['type'] = int(group['type'])
