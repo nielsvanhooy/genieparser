@@ -324,6 +324,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('trust_device'): str,
                 Optional('carrier_delay'): list,
                 Optional('shutdown'): bool,
+                Optional("encapsulation_ppp"): bool,
                 Optional('encapsulation_dot1q'): str,
                 Optional('description'): str,
                 Optional('dot1x_pae_authenticator'): bool,
@@ -446,7 +447,19 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("protocol"): str,
                         Optional("timers"): str,
                     }
-                }
+                },
+                Optional("dialer_pool"): str,
+                Optional("mtu"): str,
+                Optional("chap_hostname"): str,
+                Optional("chap_password"): str,
+                Optional("chap_encryption"): int,
+                Optional("pap_username"): str,
+                Optional('pap_password'): str,
+                Optional("pppoe_max_payload"): int,
+                Optional("ip_helpers"): list,
+                Optional("pvc_vp"): int,
+                Optional("pvc_vc"): int,
+                Optional("pvc_ubr"): str
             }
         }
     }
@@ -482,7 +495,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         config_dict = {}
 
         # interface GigabitEthernet0
-        p1 = re.compile(r'^interface +(?P<interface>[\S]+)$')
+        p1 = re.compile(r'^interface +(?P<interface>.*?)((?=\s)|$)')
 
         # description "Boot lan interface"
         # description ISE Controlled Port
@@ -504,6 +517,9 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # encapsulation dot1Q 201
         p7 = re.compile(r'^encapsulation +dot1Q +(?P<dot1q>[\d]+)$')
+
+        # encapsulation ppp
+        p7_1 = re.compile(r"^encapsulation ppp$")
 
         # carrier-delay up 60
         # carrier-delay down 60
@@ -665,10 +681,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p58 = re.compile(r"^mpls ip$")
 
         # service-policy input AutoQos-4.0-CiscoPhone-Input-Policy
-        p59 = re.compile(r'^service-policy\s+input\s+(?P<input_policy>\S+)$')
+        p59 = re.compile(r'^service-policy\s+(in|input)\s+(?P<input_policy>\S+)$')
 
         # service-policy output AutoQos-4.0-Output-Policy
-        p60 = re.compile(r'^service-policy\s+output\s+(?P<output_policy>\S+)$')
+        p60 = re.compile(r'^service-policy\s+(out|output)\s+(?P<output_policy>\S+)$')
 
         # switchport port-security mac-address sticky 1020.4bb1.6f2f
         p61 = re.compile(r"^switchport port-security mac-address sticky (?P<value>([a-fA-F\d]{4}\.){2}[a-fA-F\d]{4})$")
@@ -737,6 +753,36 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # duplex full/duplex half
         p82 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
+
+        # below matches
+        # dialer pool-member 1
+        # pppoe-client dial-pool-number 1
+        p83 = re.compile(r"^(pppoe-client dial-pool-number|dialer (pool-member|pool))\s(?P<pool_number>\d+)$")
+
+        # mtu 1500
+        p84 = re.compile(r"^mtu\s(?P<mtu>\d+)$")
+
+        # ppp chap hostname hostname
+        p85 = re.compile(r"^ppp chap hostname\s(?P<chap_hostname>.*)$")
+
+        # ppp chap password 0 password
+        # ppp chap password 7 08345F4B1B48
+        p86 = re.compile(r"^ppp chap password\s(?P<chap_encryption>\d+)\s+(?P<chap_encryption_string>.*)$")
+
+        # ppp pap sent-username cisco password myfirstpassword
+        p87 = re.compile(r"^ppp pap sent-username\s(?P<pap_username>.*?)(?=\s)\spassword\s(?P<pap_password>.*)$")
+
+        # pppoe-client ppp-max-payload 1500
+        p88 = re.compile(r"^pppoe-client ppp-max-payload\s(?P<pppoe_max_payload>\d+)$")
+
+        # ip helper-address 158.67.245.51
+        p89 = re.compile(r"^ip\shelper-address\s(?P<ip_helper>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$")
+
+        # pvc 2/32
+        p90 = re.compile(r"^pvc\s(?P<pvc_vp>\d+)\/(?P<pvc_vc>\d+)$")
+
+        # ubr 1024 48
+        p91 = re.compile(r"^ubr\s(?P<ubr_settings>.*)$")
 
         p_find_fhrp = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
 
@@ -830,6 +876,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'encapsulation_dot1q': group['dot1q']})
+                continue
+
+            # encapsulation ppp
+            m = p7_1.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'encapsulation_ppp': True})
                 continue
 
             # carrier-delay up 60
@@ -1370,6 +1423,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                         'acl_name': group['acl_name'],
                         'direction': group['direction']
                     }
+                continue
 
             # lisp mobility 20_1_1_0-global-IPV4
             m = p73.match(line)
@@ -1420,21 +1474,105 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update({'device_tracking_attach_policy': group['device_tracking_attach_policy']})
                 continue
 
+            # media-type rj45
             m = p80.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'media_type': group['media_type']})
+                continue
 
+            # speed 10 / speed 100/ speed1000
             m = p81.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'port_speed': group['port_speed']})
+                continue
 
+            # duplex full/duplex half
             m = p82.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'port_duplex': group['port_duplex']})
+                continue
 
+            # dialer pool-member 1
+            # pppoe-client dial-pool-number 1
+            m = p83.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'dialer_pool': group['pool_number']})
+                continue
+
+            # mtu 1500
+            m = p84.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'mtu': group['mtu']})
+                continue
+
+            # ppp chap hostname hostname
+            m = p85.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'chap_hostname': group['chap_hostname']})
+                continue
+
+            # ppp chap password 0 password
+            # ppp chap password 7 08345F4B1B48
+            m = p86.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'chap_password': group['chap_encryption_string'],
+                    'chap_encryption': int(group['chap_encryption']),
+                })
+                continue
+
+            # ppp pap sent-username cisco password myfirstpassword
+            m = p87.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'pap_username': group['pap_username'],
+                    'pap_password': group['pap_password'],
+                })
+                continue
+
+            # pppoe-client ppp-max-payload 1500
+            m = p88.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pppoe_max_payload': int(group['pppoe_max_payload'])})
+                continue
+
+            # ip helper-address 158.67.245.51
+            m = p89.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict.get("ip_helpers", False):
+                    intf_dict['ip_helpers'] = []
+
+                intf_dict['ip_helpers'].append(group['ip_helper'])
+                continue
+
+            # pvc 2/32
+            m = p90.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'pvc_vp': int(group['pvc_vp']),
+                    'pvc_vc': int(group['pvc_vc']),
+                })
+                continue
+
+            # ubr 1024 48
+            m = p91.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pvc_ubr': group['ubr_settings']})
+                continue
+
+            # FROM HERE ALL FHRP
             m = p_find_fhrp.match(line)
             if m:
                 group = m.groupdict()
@@ -1444,7 +1582,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                                 "group_id": group['group_id'],
                             }
                         })
+                    # dont use continue here otherwise
+                    # it wont match the other fhrp settings
 
+            # standby 20 authentication cisco
             m = p_fhrp_authentication_plain.match(line)
             if m:
                 group = m.groupdict()
@@ -1455,6 +1596,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 )
                 continue
 
+            # vrrp 100 authentication md5 key-string 7 070C285F4D06
             m = p_fhrp_authentication_key_string.match(line)
             if m:
                 group = m.groupdict()
@@ -1466,6 +1608,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 )
                 continue
 
+            # vrrp 100 ip 1.1.1.2
+            # standby 100 ip 1.1.1.2
             m = p_fhrp_ips.match(line)
             if m:
                 group = m.groupdict()
@@ -1475,6 +1619,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict['fhrps'][group['group_id']]['ips'].append(group['ips'])
                 continue
 
+            # vrrp 100 description hatseflats
+            # standby 100 description hatseflats
             m = p_fhrp_description.match(line)
             if m:
                 group = m.groupdict()
@@ -1483,6 +1629,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 })
                 continue
 
+            # vrrp 100 priority 90
+            # standby 100 priority 90
             m = p_fhrp_priority.match(line)
             if m:
                 group = m.groupdict()
@@ -1491,6 +1639,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 })
                 continue
 
+            #  vrrp 110 timers advertise msec 50
+            #  vrrp 110 timers learn
             m = p_fhrp_timers.match(line)
             if m:
                 group = m.groupdict()
