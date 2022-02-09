@@ -439,7 +439,7 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("encryption_level"): str,
                         Optional("fhrp_description"): str,
                         Optional("group_id"): str,
-                        Optional("ips"): str,
+                        Optional("ips"): list,
                         Optional("learn"): bool,
                         Optional("preempt"): bool,
                         Optional("priority"): str,
@@ -762,7 +762,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # because the variability is immense in production networks
         #  vrrp 110 timers advertise msec 50
         #  vrrp 110 timers learn
-        p_fhrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+timers.*?((?=learn)|(?=\d+))(?P<timers>.*)$")
+        p_fhrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
 
         # we want to know if an interface disabled the default vrrp preempt.
         # no vrrp 120 preempt
@@ -1469,9 +1469,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p_fhrp_ips.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict['fhrps'][group['group_id']].update({
-                    "ips": group['ips']
-                })
+                if not intf_dict['fhrps'][group['group_id']].get("ips", False):
+                    intf_dict['fhrps'][group['group_id']]['ips'] = []
+
+                intf_dict['fhrps'][group['group_id']]['ips'].append(group['ips'])
                 continue
 
             m = p_fhrp_description.match(line)
