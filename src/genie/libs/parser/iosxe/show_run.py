@@ -459,7 +459,19 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional("ip_helpers"): list,
                 Optional("pvc_vp"): int,
                 Optional("pvc_vc"): int,
-                Optional("pvc_ubr"): str
+                Optional("pvc_ubr"): str,
+                Optional("pvc_vbr_nrt"): str,
+                Optional('ip_negotiated'): bool,
+                Optional("hold_queue_in"): int,
+                Optional("hold_queue_out"): int,
+                Optional("service_instances"): {
+                    Any(): {
+                        Optional("bridge_domain"): str,
+                        Optional("dot1q"): str,
+                        Optional("service_policy"): str,
+                        Optional("description"): str
+                    }
+                }
             }
         }
     }
@@ -516,7 +528,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p6 = re.compile(r'^(?P<shutdown>shutdown)$')
 
         # encapsulation dot1Q 201
-        p7 = re.compile(r'^encapsulation +dot1Q +(?P<dot1q>[\d]+)$')
+        p7 = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>[\d]+)$')
 
         # encapsulation ppp
         p7_1 = re.compile(r"^encapsulation ppp$")
@@ -784,6 +796,35 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # ubr 1024 48
         p91 = re.compile(r"^ubr\s(?P<ubr_settings>.*)$")
 
+        # ip address negotiated
+        p92 = re.compile(r"^ip address negotiated$")
+
+        # vbr-nrt 128 256
+        p93 = re.compile(r"^vbr-nrt\s(?P<vbr_nrt>.*)$")
+
+        # hold-queue 500 in
+        p94 = re.compile(r"^hold-queue\s(?P<hold_queue_in>\d+)\sin$")
+
+        # hold-queue 200 out
+        p95 = re.compile(r"^hold-queue\s(?P<hold_queue_out>\d+)\sout$")
+
+        # find the service_instance
+        # service instance 11 ethernet
+        p_find_service_instance = re.compile(r"^service instance\s(?P<service_instance>\d+) ethernet$")
+
+        # bridge-domain 11 split-horizon group 0
+        p_service_instance_bridge_domain = re.compile(r"bridge-domain\s(?P<bridge_domain>\d+).*$")
+
+        # recycle p7 pattern
+        # encapsulation dot1q 11
+        p_service_instance_dot1q = p7
+
+        # service-policy input AutoQos-4.0-CiscoPhone-Input-Policy
+        p_service_instance_service_policy = p59
+
+        # description hoort bij BDI15 TEST2
+        p_service_instance_description = p2
+
         p_find_fhrp = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
 
         # standby 20 authentication cisco
@@ -812,11 +853,11 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # we want to know if an interface disabled the default vrrp preempt.
         # no vrrp 120 preempt
-        p_fhrp_no_preempt_vrrp = re.compile(r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt$")
+        p_fhrp_no_preempt_vrrp = re.compile(r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt")
 
         # and for hsrp it must be explicitly defined if preempt should be used
         # standby 10 preempt
-        p_fhrp_preempt_hsrp = re.compile(r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt$")
+        p_fhrp_preempt_hsrp = re.compile(r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt")
 
         for line in output.splitlines():
             line = line.strip()
@@ -1572,6 +1613,30 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update({'pvc_ubr': group['ubr_settings']})
                 continue
 
+            # ip address negotiated
+            m = p92.match(line)
+            if m:
+                intf_dict.update({'ip_negotiated': True})
+                continue
+
+            m = p93.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pvc_vbr_nrt': group['vbr_nrt']})
+                continue
+
+            m = p94.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'hold_queue_in': int(group['hold_queue_in'])})
+                continue
+
+            m = p95.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'hold_queue_out': int(group['hold_queue_out'])})
+                continue
+
             # FROM HERE ALL FHRP
             m = p_find_fhrp.match(line)
             if m:
@@ -1669,6 +1734,57 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 })
                 continue
 
+            m = p_find_service_instance.match(line)
+            if m:
+                service_instance = m.groupdict()['service_instance']
+                # create the service_instance dict
+                if not intf_dict.get("service_instances", False):
+                    intf_dict['service_instances'] = {}
+                intf_dict['service_instances'][service_instance] = {}
+
+                # service instance config is extra identented and needs to be kept together.
+                # therefor we search for the block based on the service_instance_id
+                #  service instance 11 ethernet
+                #  encapsulation dot1q 11
+                #  rewrite ingress tag pop 1 symmetric
+                #  bridge-domain 11 split-horizon group 0
+                # !
+                regex = f"service instance\s{service_instance}\sethernet(?P<service_instance_config>[\s\S]*?(?=\n.*?\!))"
+                p_service_instance_config = re.compile(regex)
+                service_instance_config = p_service_instance_config.findall(output)
+
+                for line in service_instance_config[0].splitlines():
+                    line = line.strip()
+
+                    m = p_service_instance_bridge_domain.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'bridge_domain'] = group['bridge_domain']
+                        continue
+
+                    m = p_service_instance_dot1q.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'dot1q'] = group['dot1q']
+                        continue
+
+                    m = p_service_instance_service_policy.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'service_policy'] = group['input_policy']
+                        continue
+
+                    m = p_service_instance_description.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'description'] = group['description']
+                        continue
+
+
         # remove empty children like acl or hfrp if they are
         # empty in the end keeping in mind that config_dict['interfaces'] has to exist to do that
         if config_dict.get("interfaces", False):
@@ -1677,6 +1793,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                     del v['fhrps']
                 if not bool(v['acl']):
                     del v['acl']
+                # if an interface has service_instances
+                # we unset the global encapsulation_dot1q
+                # we unset the global description
+                if intf_dict.get("service_instances", False) \
+                        and intf_dict["encapsulation_dot1q"]:
+                    del intf_dict["encapsulation_dot1q"]
+                    del intf_dict['description']
 
         return config_dict
 

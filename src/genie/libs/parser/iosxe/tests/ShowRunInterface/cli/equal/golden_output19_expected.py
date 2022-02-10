@@ -49,6 +49,12 @@ expected_output = {
                 "158.67.245.51",
                 "158.67.245.53"
             ]
+        },
+        "Cellular0/2/0": {
+            "description": "Wireless Access to Epacity/GIPv",
+            "ip_negotiated": True,
+            "load_interval": "30",
+            "output_policy": "policy-cbwfq"
         }
     }
 }

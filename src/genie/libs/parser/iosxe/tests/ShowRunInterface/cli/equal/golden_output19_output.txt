@@ -49,3 +49,14 @@ interface GigabitEthernet0/0/1.954
  ntp disable
  no cdp enable
 !
+interface Cellular0/2/0
+ description Wireless Access to Epacity/GIPv
+ ip address negotiated
+ load-interval 30
+ dialer in-band
+ dialer idle-timeout 0
+ dialer watch-group 1
+ dialer-group 1
+ service-policy output policy-cbwfq
+ no shutdown
+!
