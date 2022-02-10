@@ -466,6 +466,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional("hold_queue_out"): int,
                 Optional("service_instances"): {
                     Any(): {
+                        Optional("service_instance"): str,
                         Optional("bridge_domain"): str,
                         Optional("dot1q"): str,
                         Optional("service_policy"): str,
@@ -1741,6 +1742,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 if not intf_dict.get("service_instances", False):
                     intf_dict['service_instances'] = {}
                 intf_dict['service_instances'][service_instance] = {}
+                intf_dict['service_instances'][service_instance]['service_instance']\
+                    = service_instance
 
                 # service instance config is extra identented and needs to be kept together.
                 # therefor we search for the block based on the service_instance_id
