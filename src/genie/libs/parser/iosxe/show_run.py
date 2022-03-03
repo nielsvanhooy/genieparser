@@ -5,7 +5,7 @@ IOSXE parsers for the following show commands:
     * 'show running-config interface {interface}'
         * 'show running-config all | sec {interface}'
         * 'show running-config mdns-sd' 
-
+    * 'show running-config aaa'
 '''
 
 # Python
@@ -433,6 +433,8 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional('local_routing'): bool
                     }
                 },
+                Optional('stackwise_virtual_link'): int,
+                Optional('dual_active_detection'): bool,
                 Optional('media_type'): str,
                 Optional('fhrps'): {
                     Any(): {
@@ -758,56 +760,62 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         #device-tracking attach-policy IPDT_POLICY
         p79 = re.compile(r'^device-tracking\sattach-policy\s+(?P<device_tracking_attach_policy>\S+)$')
 
+        # stackwise-virtual link 1
+        p80 = re.compile(r'^stackwise-virtual\slink\s+(?P<stackwise_virtual_link>\d+)$')
+
+        # stackwise-virtual dual-active-detection
+        p81 = re.compile(r'^stackwise-virtual\s+(?P<dual_active_detection>\S+)$')
+
         # media-type rj45
-        p80 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
+        p82 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
 
         # speed 10 / speed 100/ speed1000
-        p81 = re.compile(r'^speed\s+(?P<port_speed>\d+)$')
+        p83 = re.compile(r'^speed\s+(?P<port_speed>\d+)$')
 
         # duplex full/duplex half
-        p82 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
+        p84 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
 
         # below matches
         # dialer pool-member 1
         # pppoe-client dial-pool-number 1
-        p83 = re.compile(r"^(pppoe-client dial-pool-number|dialer (pool-member|pool))\s(?P<pool_number>\d+)$")
+        p85 = re.compile(r"^(pppoe-client dial-pool-number|dialer (pool-member|pool))\s(?P<pool_number>\d+)$")
 
         # mtu 1500
-        p84 = re.compile(r"^mtu\s(?P<mtu>\d+)$")
+        p86 = re.compile(r"^mtu\s(?P<mtu>\d+)$")
 
         # ppp chap hostname hostname
-        p85 = re.compile(r"^ppp chap hostname\s(?P<chap_hostname>.*)$")
+        p87 = re.compile(r"^ppp chap hostname\s(?P<chap_hostname>.*)$")
 
         # ppp chap password 0 password
         # ppp chap password 7 08345F4B1B48
-        p86 = re.compile(r"^ppp chap password\s(?P<chap_encryption>\d+)\s+(?P<chap_encryption_string>.*)$")
+        p88 = re.compile(r"^ppp chap password\s(?P<chap_encryption>\d+)\s+(?P<chap_encryption_string>.*)$")
 
         # ppp pap sent-username cisco password myfirstpassword
-        p87 = re.compile(r"^ppp pap sent-username\s(?P<pap_username>.*?)(?=\s)\spassword\s(?P<pap_password>.*)$")
+        p89 = re.compile(r"^ppp pap sent-username\s(?P<pap_username>.*?)(?=\s)\spassword\s(?P<pap_password>.*)$")
 
         # pppoe-client ppp-max-payload 1500
-        p88 = re.compile(r"^pppoe-client ppp-max-payload\s(?P<pppoe_max_payload>\d+)$")
+        p90 = re.compile(r"^pppoe-client ppp-max-payload\s(?P<pppoe_max_payload>\d+)$")
 
         # ip helper-address 158.67.245.51
-        p89 = re.compile(r"^ip\shelper-address\s(?P<ip_helper>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$")
+        p91 = re.compile(r"^ip\shelper-address\s(?P<ip_helper>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$")
 
         # pvc 2/32
-        p90 = re.compile(r"^pvc\s(?P<pvc_vp>\d+)\/(?P<pvc_vc>\d+)$")
+        p92 = re.compile(r"^pvc\s(?P<pvc_vp>\d+)\/(?P<pvc_vc>\d+)$")
 
         # ubr 1024 48
-        p91 = re.compile(r"^ubr\s(?P<ubr_settings>.*)$")
+        p93 = re.compile(r"^ubr\s(?P<ubr_settings>.*)$")
 
         # ip address negotiated
-        p92 = re.compile(r"^ip address negotiated$")
+        p94 = re.compile(r"^ip address negotiated$")
 
         # vbr-nrt 128 256
-        p93 = re.compile(r"^vbr-nrt\s(?P<vbr_nrt>.*)$")
+        p95 = re.compile(r"^vbr-nrt\s(?P<vbr_nrt>.*)$")
 
         # hold-queue 500 in
-        p94 = re.compile(r"^hold-queue\s(?P<hold_queue_in>\d+)\sin$")
+        p96 = re.compile(r"^hold-queue\s(?P<hold_queue_in>\d+)\sin$")
 
         # hold-queue 200 out
-        p95 = re.compile(r"^hold-queue\s(?P<hold_queue_out>\d+)\sout$")
+        p97 = re.compile(r"^hold-queue\s(?P<hold_queue_out>\d+)\sout$")
 
         # find the service_instance
         # service instance 11 ethernet
@@ -1516,22 +1524,37 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update({'device_tracking_attach_policy': group['device_tracking_attach_policy']})
                 continue
 
-            # media-type rj45
+            # stackwise-virtual link 1
             m = p80.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update(
+                    {'stackwise_virtual_link': int(group['stackwise_virtual_link'])})
+                continue
+
+            # stackwise-virtual dual-active-detection
+            m = p81.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'dual_active_detection': group[                                             'dual_active_detection'] == "dual-active-detection"})
+                continue
+
+            # media-type rj45
+            m = p82.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'media_type': group['media_type']})
                 continue
 
             # speed 10 / speed 100/ speed1000
-            m = p81.match(line)
+            m = p83.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'port_speed': group['port_speed']})
                 continue
 
             # duplex full/duplex half
-            m = p82.match(line)
+            m = p84.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'port_duplex': group['port_duplex']})
@@ -1539,21 +1562,21 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
             # dialer pool-member 1
             # pppoe-client dial-pool-number 1
-            m = p83.match(line)
+            m = p85.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'dialer_pool': group['pool_number']})
                 continue
 
             # mtu 1500
-            m = p84.match(line)
+            m = p86.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'mtu': group['mtu']})
                 continue
 
             # ppp chap hostname hostname
-            m = p85.match(line)
+            m = p87.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'chap_hostname': group['chap_hostname']})
@@ -1561,7 +1584,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
             # ppp chap password 0 password
             # ppp chap password 7 08345F4B1B48
-            m = p86.match(line)
+            m = p88.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({
@@ -1571,7 +1594,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 continue
 
             # ppp pap sent-username cisco password myfirstpassword
-            m = p87.match(line)
+            m = p89.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({
@@ -1581,14 +1604,14 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 continue
 
             # pppoe-client ppp-max-payload 1500
-            m = p88.match(line)
+            m = p90.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'pppoe_max_payload': int(group['pppoe_max_payload'])})
                 continue
 
             # ip helper-address 158.67.245.51
-            m = p89.match(line)
+            m = p91.match(line)
             if m:
                 group = m.groupdict()
                 if not intf_dict.get("ip_helpers", False):
@@ -1598,7 +1621,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 continue
 
             # pvc 2/32
-            m = p90.match(line)
+            m = p92.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({
@@ -1608,31 +1631,31 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 continue
 
             # ubr 1024 48
-            m = p91.match(line)
+            m = p93.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'pvc_ubr': group['ubr_settings']})
                 continue
 
             # ip address negotiated
-            m = p92.match(line)
+            m = p94.match(line)
             if m:
                 intf_dict.update({'ip_negotiated': True})
                 continue
 
-            m = p93.match(line)
+            m = p95.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'pvc_vbr_nrt': group['vbr_nrt']})
                 continue
 
-            m = p94.match(line)
+            m = p96.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'hold_queue_in': int(group['hold_queue_in'])})
                 continue
 
-            m = p95.match(line)
+            m = p97.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'hold_queue_out': int(group['hold_queue_out'])})
@@ -2856,8 +2879,7 @@ class ShowRunningConfigAAAUsername(ShowRunningConfigAAAUsernameSchema):
             if m:
                 group = m.groupdict()
                 username = group['username']
-                users_dict = ret_dict.setdefault('username', {}).setdefault(username,
-                                                                            {})
+                users_dict = ret_dict.setdefault('username', {}).setdefault(username, {})
                 users_dict['common_criteria_policy'] = group['common_criteria_policy']
                 pass_dict = users_dict.setdefault('password', {})
                 pass_dict['type'] = int(group['type'])
@@ -3008,4 +3030,197 @@ class ShowRunningConfigFlowMonitor(ShowRunningConfigFlowMonitorSchema):
 
         return ret_dict
 
+# ==================================================
+# Schema for:
+# 	* show running-config aaa
+# ==================================================
+class ShowRunningConfigAAASchema(MetaParser):
+    """
+        Schema for :
+        * 'show running-config aaa'
+    """
+    schema = {
+        Optional('radius'): {
+            'server': {
+                Any() : {
+                    Optional('address_type'): str,
+                    Optional('address'): str,
+                    Optional('auth_port'): int,
+                    Optional('acct_port'): int,
+                    Optional('key'): str,
+                }
+            },
+        },
+        Optional('tacacs'): {
+            'server': {
+                Any() : {
+                    Optional('address_type'): str,
+                    Optional('address'): str,
+                    Optional('auth_port'): int,
+                    Optional('acct_port'): int,
+                    Optional('key'): str,
+                }
+            },
+        },
+        Optional('group_server'): {
+            Any() : {
+                Any() : {
+                    Optional('server_name'): str,
+                    Optional('vrf'): str,
+                    Optional('source_interface'): str,
+                }
+            }
+        },
+        Optional('new_model'): bool,
+        Optional('session_id'): str,
+    }
+
+
+# ==================================================
+# Parser for:
+#   * show running-config aaa
+# ==================================================
+class ShowRunningConfigAAA(ShowRunningConfigAAASchema):
+    """Parser for :
+        * 'show running-config aaa'
+    """
+
+    cli_command = 'show running-config aaa'
+
+    def cli(self, output=None):
+        if output == None:
+            out = self.device.execute(self.cli_command)
+        else:
+            out = output
+
+        # radius server RADIUS_1
+        p1 = re.compile(r'^(?P<server_type>\S+)\sserver\s(?P<server_name>\S+)$')
+
+        # address ipv4 11.15.24.213 auth-port 1812 acct-port 1813
+        p2_1 = re.compile(r'^address\s(?P<address_type>\S+)\s(?P<address>\S+)\sauth-port\s(?P<auth_port>\S+)\sacct-port\s(?P<acct_port>\S+)$')
+
+        # address ipv4 11.15.24.213
+        p2_2 = re.compile(r'^address\s(?P<address_type>\S+)\s(?P<address>\S+)$')
+
+        # key Cisco123
+        p3 = re.compile(r'^key\s(?P<key>\S+)$')
+
+        # aaa group server radius RADIUS_GROUP
+        p4 = re.compile(r'^aaa\sgroup\sserver\s(?P<server_type>\S+)\s(?P<server>\S+)$')
+
+        # server name RADIUS_1
+        p5 = re.compile(r'^server\sname\s(?P<server_name>\S+)$')
+
+        # ip vrf forwarding newVRF2
+        p6 = re.compile(r'^ip\svrf\sforwarding\s(?P<vrf>\S+)$')
+
+        # ip radius source-interface TenGigabitEthernet1/0/13
+        p7 = re.compile(r'^ip\s(?P<server_type>\S+)\ssource-interface\s(?P<source_interface>\S+)$')
+
+        # aaa new-model
+        p8 = re.compile(r'^aaa\s(?P<new_model>\S+)$')
+
+        # aaa session-id common
+        p9 = re.compile(r'^aaa\ssession-id\s(?P<session_id>\S+)$')
+
+        ret_dict = {}
+
+        for line in out.splitlines():
+            line = line.strip()
+
+            # radius/tacacs server RADIUS_1
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                server_type_dict = ret_dict.setdefault(group['server_type'],{})
+                server_dict = server_type_dict.setdefault('server',{})
+                server_name_dict = server_dict.setdefault(group['server_name'],{})
+                continue
+
+            # address ipv4 11.15.24.213 auth-port 1812 acct-port 1813
+            m = p2_1.match(line)
+            if m:
+                group = m.groupdict()
+                server_name_dict.update({
+                    'address_type': group['address_type'],
+                    'address': group['address'],
+                    'auth_port': int(group['auth_port']),
+                    'acct_port': int(group['acct_port']),
+                })
+                continue
+
+            # address ipv4 11.15.24.213
+            m = p2_2.match(line)
+            if m:
+                group = m.groupdict()
+                server_name_dict.update({
+                    'address_type': group['address_type'],
+                    'address': group['address'],
+                })
+                continue
+
+            # key Cisco123
+            m = p3.match(line)
+            if m:
+                group = m.groupdict()
+                server_name_dict.update({
+                    'key': group['key'],
+                })
+                continue
+
+            # aaa group server radius RADIUS_GROUP
+            m = p4.match(line)
+            if m:
+                group = m.groupdict()
+                group_server_dict = ret_dict.setdefault('group_server',{})
+                group_server_name_dict = group_server_dict.setdefault(group['server_type'],{})
+                group_name_dict = group_server_name_dict.setdefault(group['server'], {})
+                continue
+
+            # server name RADIUS_1
+            m = p5.match(line)
+            if m:
+                group = m.groupdict()
+                group_name_dict.update({
+                    'server_name': group['server_name'],
+                })
+                continue
+
+            # ip vrf forwarding newVRF2
+            m = p6.match(line)
+            if m:
+                group = m.groupdict()
+                group_name_dict.update({
+                    'vrf': group['vrf'],
+                })
+                continue
+
+            # ip radius source-interface TenGigabitEthernet1/0/13
+            m = p7.match(line)
+            if m:
+                group = m.groupdict()
+                group_name_dict.update({
+                    'source_interface': group['source_interface'],
+                })
+                continue
+
+            # aaa new-model
+            m = p8.match(line)
+            if m:
+                group = m.groupdict()
+                ret_dict.update({
+                    'new_model': bool(group['new_model'] == 'new-model')
+                })
+                continue
+
+            # aaa session-id common
+            m = p9.match(line)
+            if m:
+                group = m.groupdict()
+                ret_dict.update({
+                    'session_id': group['session_id']
+                })
+                continue
+
+        return ret_dict
 
