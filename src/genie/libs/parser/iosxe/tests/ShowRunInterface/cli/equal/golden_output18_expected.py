@@ -4,7 +4,8 @@ expected_output = {
             "fhrps": {
                 "1": {
                     "group_id": "1",
-                    'ips': ['1.1.1.2', '11.11.11.11 secondary', '111.111.111.111 secondary'],
+                    'ips': ['1.1.1.2', '11.11.11.11 secondary',
+                            '111.111.111.111 secondary'],
                     "priority": "90",
                     "timers": "msec 150 160",
                     "encryption_level": "7",
@@ -21,15 +22,19 @@ expected_output = {
                 },
                 "20": {
                     "group_id": "20",
-                    'ips': ['20.20.20.20', '22.22.22.22 secondary', '222.222.222.222 secondary'],
+                    'ips': ['20.20.20.20', '22.22.22.22 secondary',
+                            '222.222.222.222 secondary'],
                     "priority": "100",
                     "timers": "150 160",
                     "encryption_string": "cisco"
                 }
             },
             "ipv4": {
-                "ip": "1.1.1.1",
-                "netmask": "255.255.255.0"
+                '1.1.1.1': {
+                    "ip": "1.1.1.1",
+                    "netmask": "255.255.255.0",
+                    "primary": True
+                }
             }
         }
     }

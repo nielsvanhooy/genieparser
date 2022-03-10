@@ -42,8 +42,11 @@ expected_output = {
             "encapsulation_dot1q": "954",
             "vrf": "cisco",
             "ipv4": {
-                "ip": "172.18.132.252",
-                "netmask": "255.255.255.0"
+                "172.18.132.252": {
+                    "ip": "172.18.132.252",
+                    "netmask": "255.255.255.0",
+                    "primary": True
+                }
             },
             "ip_helpers": [
                 "158.67.245.51",

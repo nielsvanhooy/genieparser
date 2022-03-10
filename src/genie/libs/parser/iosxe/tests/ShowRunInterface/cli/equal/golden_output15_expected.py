@@ -1,4 +1,4 @@
-expected_output= {
+expected_output = {
     'interfaces': {
         'Vlan1023': {
             'ip_ospf': {
@@ -7,8 +7,11 @@ expected_output= {
                 },
             },
             'ipv4': {
-                'ip': '20.1.1.1',
-                'netmask': '255.255.255.252',
+                '20.1.1.1': {
+                    'ip': '20.1.1.1',
+                    'netmask': '255.255.255.252',
+                    'primary': True,
+                }
             },
             'lisp_mobility': '20_1_1_0-global-IPV4',
         },
