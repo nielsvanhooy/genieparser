@@ -809,7 +809,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p92 = re.compile(r"^pvc\s(?P<pvc_vp>\d+)\/(?P<pvc_vc>\d+)$")
 
         # ubr 1024 48
-        p93 = re.compile(r"^ubr\s(?P<ubr_settings>.*)$")
+        p93 = re.compile(r"^ubr(\+|)\s(?P<ubr_settings>.*)$")
 
         # ip address negotiated
         p94 = re.compile(r"^ip address negotiated$")
