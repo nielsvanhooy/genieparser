@@ -339,8 +339,11 @@ class ShowRunInterfaceSchema(MetaParser):
                     },
                 },
                 Optional('ipv4'): {
-                    'ip': str,
-                    'netmask': str,
+                    Any(): {
+                        'ip': str,
+                        'netmask': str,
+                        'primary': bool,
+                    },
                 },
                 Optional('ipv6'): list,
                 Optional('ipv6_ospf'): {
@@ -521,7 +524,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p3 = re.compile(r'^(ip )?vrf +forwarding +(?P<vrf>[\S\s]+)$')
 
         # ip address 10.1.21.249 255.255.255.0
-        p4 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)|\s(?P<secondary>secondary)$')
+        p4 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)$')
+
+        # ip address 10.1.21.249 255.255.255.0 secondary
+        p4_1 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)\s(?P<secondary>secondary)$')
 
         # ipv6 address 2001:db8:4:1::1/64
         # ipv6 address 2001:db8:400:1::2/112
@@ -901,13 +907,26 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p4.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict.update(
-                    {'ipv4': {
-                        'ip': group['ip'],
-                        'netmask': group['netmask']},
-                        'primary': False if group['secondary'] else True
+                if not intf_dict.get("ipv4", False):
+                    intf_dict['ipv4'] = {}
+                intf_dict['ipv4'][group['ip']] = {
+                            'ip': group['ip'],
+                            'netmask': group['netmask'],
+                            'primary': True
                     }
-                )
+                continue
+
+            # # ip address 10.1.21.249 255.255.255.0 secondary
+            m = p4_1.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict.get("ipv4", False):
+                    intf_dict['ipv4'] = {}
+                intf_dict['ipv4'][group['ip']] = {
+                            'ip': group['ip'],
+                            'netmask': group['netmask'],
+                            'primary': False
+                    }
                 continue
 
             # ipv6 address 2001:db8:4:1::1/64
