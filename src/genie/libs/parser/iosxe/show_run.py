@@ -972,7 +972,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update(
-                    {'negotiation_auto': False if group['negotiation'] else True})
+                    {'negotiation_auto': group['negotiation'] is None})
                 continue
 
             # cdp enable
