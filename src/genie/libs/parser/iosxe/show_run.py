@@ -536,11 +536,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # shutdown
         p6 = re.compile(r'^(?P<shutdown>shutdown)$')
 
-        # encapsulation dot1Q 201
-        p7 = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>[\d]+)$')
-
         # encapsulation ppp
-        p7_1 = re.compile(r"^encapsulation ppp$")
+        p7 = re.compile(r"^encapsulation ppp$")
 
         # carrier-delay up 60
         # carrier-delay down 60
@@ -830,9 +827,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # bridge-domain 11 split-horizon group 0
         p_service_instance_bridge_domain = re.compile(r"bridge-domain\s(?P<bridge_domain>\d+).*$")
 
-        # recycle p7 pattern
         # encapsulation dot1q 11
-        p_service_instance_dot1q = p7
+        p_service_instance_dot1q = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>[\d]+)$')
 
         # service-policy input AutoQos-4.0-CiscoPhone-Input-Policy
         p_service_instance_service_policy = p59
@@ -943,15 +939,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update({'shutdown': True})
                 continue
 
-            # encapsulation dot1Q 201
-            m = p7.match(line)
-            if m:
-                group = m.groupdict()
-                intf_dict.update({'encapsulation_dot1q': group['dot1q']})
-                continue
-
             # encapsulation ppp
-            m = p7_1.match(line)
+            m = p7.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict.update({'encapsulation_ppp': True})
