@@ -776,7 +776,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p82 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
 
         # speed 10 / speed 100/ speed1000
-        p83 = re.compile(r'^speed\s+(?P<port_speed>\d+)$')
+        p83 = re.compile(r'^speed\s+(?P<port_speed>\d+|\w+)$')
 
         # duplex full/duplex half
         p84 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
