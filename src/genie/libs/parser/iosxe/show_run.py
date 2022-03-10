@@ -775,11 +775,11 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # media-type rj45
         p82 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
 
-        # speed 10 / speed 100/ speed1000
+        # speed 10 / speed 100/ speed 1000 / speed auto
         p83 = re.compile(r'^speed\s+(?P<port_speed>\d+|\w+)$')
 
-        # duplex full/duplex half
-        p84 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half))$")
+        # duplex full / duplex half / duplex auto
+        p84 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half|auto))$")
 
         # below matches
         # dialer pool-member 1
