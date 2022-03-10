@@ -514,14 +514,14 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # description "Boot lan interface"
         # description ISE Controlled Port
-        p2 = re.compile(r'^description +(?P<description>[\S\s]+)$')
+        p2 = re.compile(r'^description\s+(?P<description>.*)$')
 
         # vrf forwarding Mgmt-intf
         # ip vrf forwarding oam
         p3 = re.compile(r'^(ip )?vrf +forwarding +(?P<vrf>[\S\s]+)$')
 
         # ip address 10.1.21.249 255.255.255.0
-        p4 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)$')
+        p4 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)|(?P<secondary> secondary)$')
 
         # ipv6 address 2001:db8:4:1::1/64
         # ipv6 address 2001:db8:400:1::2/112
@@ -901,10 +901,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p4.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict.update({'ipv4':{
-                                    'ip': group['ip'],
-                                    'netmask': group['netmask']},
-                                })
+                intf_dict.update(
+                    {'ipv4': {
+                        'ip': group['ip'],
+                        'netmask': group['netmask']},
+                        'primary': False if group['secondary'] else True
+                    }
+                )
                 continue
 
             # ipv6 address 2001:db8:4:1::1/64
