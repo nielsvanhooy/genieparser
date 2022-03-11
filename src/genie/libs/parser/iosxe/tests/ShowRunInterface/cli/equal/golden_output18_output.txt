@@ -21,3 +21,20 @@ interface Vlan10
  standby 20 name vpnout
  standby 20 authentication cisco
 !
+interface vlan88
+ ip address 88.88.88.88 255.255.255.0
+ vrrp 100 ip 1.1.1.2
+ vrrp 100 description hatseflats
+ vrrp 100 authentication md5 key-string 7 070C285F4D06
+ vrrp 100 priority 90
+ vrrp 100 timers advertise 50
+ vrrp 110 ip 2.2.2.2
+ vrrp 110 timers advertise msec 50
+ vrrp 110 authentication cisco
+ vrrp 110 timers learn
+ vrrp 110 priority 100
+ vrrp 120 ip 3.3.3.3
+ vrrp 120 timers learn
+ vrrp 120 priority 120
+ no vrrp 120 preempt
+!

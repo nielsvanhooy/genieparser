@@ -1690,6 +1690,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 if not intf_dict['fhrps'].get(group['group_id'], False):
                     intf_dict['fhrps'].update({
                             group['group_id']: {
+                                "protocol": "hsrp" if "standby" in group['fhrp_protocol'] else "vrrp",
                                 "group_id": group['group_id'],
                             }
                         })
