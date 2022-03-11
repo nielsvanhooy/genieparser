@@ -446,12 +446,13 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("fhrp_description"): str,
                         Optional("group_id"): str,
                         Optional("ips"): list,
-                        Optional("learn"): bool,
                         Optional("vrrp_preempt"): bool,
                         Optional("hsrp_preempt"): bool,
                         Optional("priority"): str,
                         Optional("protocol"): str,
-                        Optional("timers"): str,
+                        Optional("hsrp_timers"): str,
+                        Optional("vrrp_timers"): str,
+                        Optional("vrrp_learn"): bool,
                     }
                 },
                 Optional("dialer_pool"): str,
@@ -861,11 +862,14 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # standby 100 priority 90
         p_fhrp_priority = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+priority\s(?P<priority>\d+)$")
 
-        # we are only interested in the last part.
-        # because the variability is immense in production networks
+        # standby 1 timers msec 150 160
+        p_hsrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
+
         #  vrrp 110 timers advertise msec 50
+        p_vrrp_timers = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers advertise\s(?P<timers>.*)$")
+
         #  vrrp 110 timers learn
-        p_fhrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
+        p_vrrp_learn = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>learn)$")
 
         # we want to know if an interface disabled the default vrrp preempt.
         # no vrrp 120 preempt
@@ -1752,14 +1756,30 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 })
                 continue
 
-            #  vrrp 110 timers advertise msec 50
-            #  vrrp 110 timers learn
-            m = p_fhrp_timers.match(line)
+            # standby 1 timers msec 150 160
+            m = p_hsrp_timers.match(line)
             if m:
                 group = m.groupdict()
                 intf_dict['fhrps'][group['group_id']].update({
-                    "timers": group['timers'],
-                    "learn": True if "learn" in group['timers'] else False
+                    "hsrp_timers": group['timers'],
+                })
+                continue
+
+            # vrrp 110 timers advertise msec 50
+            m = p_vrrp_timers.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "vrrp_timers": group['timers'],
+                })
+                continue
+
+            # vrrp 110 timers learn
+            m = p_vrrp_learn.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "vrrp_learn": True if "learn" in group['timers'] else False
                 })
                 continue
 

@@ -1,4 +1,4 @@
-expected_output =  {
+expected_output =   {
      'interfaces': {
          'Vlan10': {
              'fhrps': {
@@ -7,32 +7,29 @@ expected_output =  {
                      'encryption_string': '070C285F4D06',
                      'fhrp_description': 'vpnout',
                      'group_id': '1',
+                     'hsrp_timers': 'msec 150 160',
                      'ips': ['1.1.1.2', '11.11.11.11 secondary', '111.111.111.111 secondary'],
-                     'learn': False,
                      'priority': '90',
                      'protocol': 'hsrp',
-                     'timers': 'msec 150 160',
                  },
                  '2': {
                      'encryption_level': '7',
                      'encryption_string': '070C285F4D06',
                      'group_id': '2',
                      'hsrp_preempt': True,
+                     'hsrp_timers': 'msec 150 msec 160',
                      'ips': ['2.2.2.2'],
-                     'learn': False,
                      'priority': '200',
                      'protocol': 'hsrp',
-                     'timers': 'msec 150 msec 160',
                  },
                  '20': {
                      'encryption_string': 'cisco',
                      'fhrp_description': 'vpnout',
                      'group_id': '20',
+                     'hsrp_timers': '150 160',
                      'ips': ['20.20.20.20', '22.22.22.22 secondary', '222.222.222.222 secondary'],
-                     'learn': False,
                      'priority': '100',
                      'protocol': 'hsrp',
-                     'timers': '150 160',
                  },
              },
              'ipv4': {
@@ -51,27 +48,25 @@ expected_output =  {
                      'fhrp_description': 'hatseflats',
                      'group_id': '100',
                      'ips': ['1.1.1.2'],
-                     'learn': False,
                      'priority': '90',
                      'protocol': 'vrrp',
-                     'timers': 'advertise 50',
+                     'vrrp_timers': '50',
                  },
                  '110': {
                      'encryption_string': 'cisco',
                      'group_id': '110',
                      'ips': ['2.2.2.2'],
-                     'learn': True,
                      'priority': '100',
                      'protocol': 'vrrp',
-                     'timers': 'learn',
+                     'vrrp_learn': True,
+                     'vrrp_timers': 'msec 50',
                  },
                  '120': {
                      'group_id': '120',
                      'ips': ['3.3.3.3'],
-                     'learn': True,
                      'priority': '120',
                      'protocol': 'vrrp',
-                     'timers': 'learn',
+                     'vrrp_learn': True,
                      'vrrp_preempt': False,
                  },
              },
@@ -85,4 +80,5 @@ expected_output =  {
          },
      },
  }
+
 
