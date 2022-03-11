@@ -1757,7 +1757,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict['fhrps'][group['group_id']].update({
-                    "timers": group['timers']
+                    "timers": group['timers'],
+                    "learn": True if "learn" in group['timers'] else False
                 })
                 continue
 
