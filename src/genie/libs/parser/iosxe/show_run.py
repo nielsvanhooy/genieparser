@@ -854,7 +854,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # vrrp 100 description hatseflats
         # standby 100 description hatseflats
-        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(description|name)(?P<description>.*)$")
+        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(description|name)\s+(?P<description>.*)$")
 
         # vrrp 100 priority 90
         # standby 100 priority 90
