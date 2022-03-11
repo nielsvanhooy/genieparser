@@ -5,6 +5,7 @@ expected_output = {
                 '1': {
                     'encryption_level': '7',
                     'encryption_string': '070C285F4D06',
+                    'fhrp_description': ' vpnout',
                     'group_id': '1',
                     'ips': ['1.1.1.2', '11.11.11.11 secondary',
                             '111.111.111.111 secondary'],
@@ -24,6 +25,7 @@ expected_output = {
                 },
                 '20': {
                     'encryption_string': 'cisco',
+                    'fhrp_description': ' vpnout',
                     'group_id': '20',
                     'ips': ['20.20.20.20', '22.22.22.22 secondary',
                             '222.222.222.222 secondary'],
