@@ -447,7 +447,8 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("group_id"): str,
                         Optional("ips"): list,
                         Optional("learn"): bool,
-                        Optional("preempt"): bool,
+                        Optional("vrrp_preempt"): bool,
+                        Optional("hsrp_preempt"): bool,
                         Optional("priority"): str,
                         Optional("protocol"): str,
                         Optional("timers"): str,
@@ -1768,7 +1769,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict['fhrps'][group['group_id']].update({
-                    "preempt": False
+                    "vrrp_preempt": False
                 })
                 continue
 
@@ -1778,7 +1779,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict['fhrps'][group['group_id']].update({
-                    "preempt": True
+                    "hsrp_preempt": True
                 })
                 continue
 
