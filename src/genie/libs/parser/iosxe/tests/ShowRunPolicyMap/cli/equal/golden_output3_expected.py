@@ -1,17 +1,32 @@
 expected_output = {
     'policy_map': {
-        'policy-cbwfq-1': {'class': {
-            'class-gold': {'bandwidth_percent': '40',
-                           'random_detect': ['dscp-based', 'ecn']},
-            'class-silver': {'bandwidth_percent': '20',
-                             'random_detect': ['dscp-based', 'ecn']},
-            'class-bronze': {'bandwidth_percent': '10',
-                             'random_detect': ['dscp-based', 'ecn']},
-            'management-traffic': {'bandwidth_percent': '1',
-                                   'random_detect': ['dscp-based', 'ecn'],
-                                   'qos_set': {'dscp': 'af21'}},
-            'class-default': {'bandwidth_percent': '29',
-                              'random_detect': ['dscp-based', 'ecn'],
-                              'qos_set': {'dscp': 'default'}}}}
+        'child': {
+            'class': {
+                'class-default': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc1': {
+                    'target_shape_rate': '1000000000',
+                    },
+                'tc2': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc3': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc4': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc5': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc6': {
+                    'target_shape_rate': '2000000000',
+                    },
+                'tc7': {
+                    'target_shape_rate': '2000000000',
+                    },
+                },
+            },
+        },
     }
-}
