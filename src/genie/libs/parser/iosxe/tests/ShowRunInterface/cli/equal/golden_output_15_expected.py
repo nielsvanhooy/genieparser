@@ -18,7 +18,8 @@ expected_output = {
                     'ip': '10.114.11.1',
                     'netmask': '255.255.255.252',
                     'primary': True
-                }},
+                }
+            },
         },
     },
 }

@@ -93,7 +93,7 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
 
         # policy-map L3VPN-out_child
         # policy-map type queueing child
-        # p1_1 = re.compile(r'^policy-map +(?P<policy_map>([\w\-\_]+))$')
+                # p1_1 = re.compile(r'^policy-map +(?P<policy_map>([\w\-\_]+))$')
         p1_1 = re.compile(r'^policy-map(\s+type\s+queueing\s+|\s+)(?P<policy_map>([\w\-\_]+))$')
 
         # class ARP_in
@@ -375,7 +375,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('load_interval'): str,
                 Optional('mab'): bool,
                 Optional('negotiation_auto'): bool,
-                Optional('cdp'): str,
+                                Optional('cdp'): str,
                 Optional('port_speed'): str,
                 Optional('port_duplex'): str,
                 Optional('snmp_trap_link_status'): bool,
@@ -1495,7 +1495,6 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             # ip access-group DELETE_ME in ; ip access-group TEST-OUT out
             m = p72.match(line)
             if m:
-                intf_dict['acl'] = {}
                 group = m.groupdict()
                 if group['direction'] == 'in':
                     intf_dict['acl']['inbound'] = {
