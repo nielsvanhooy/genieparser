@@ -951,7 +951,6 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             # shutdown
             m = p6.match(line)
             if m:
-                group = m.groupdict()
                 intf_dict.update({'shutdown': True})
                 continue
 
@@ -965,7 +964,6 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             # encapsulation ppp
             m = p7_1.match(line)
             if m:
-                group = m.groupdict()
                 intf_dict.update({'encapsulation_ppp': True})
                 continue
 
