@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 expected_output =   {
      'interfaces': {
          'Vlan10': {
@@ -81,14 +80,3 @@ expected_output =   {
          },
      },
  }
-
-
-=======
-expected_output = {
-    "interfaces": {
-        "GigabitEthernet1/0/27": {
-            "acl": {"inbound": {"acl_name": "TEST", "direction": "in"}}
-        }
-    }
-}
->>>>>>> 559f8a2f554f27bbd34b8ccf5ae0b922b8797282

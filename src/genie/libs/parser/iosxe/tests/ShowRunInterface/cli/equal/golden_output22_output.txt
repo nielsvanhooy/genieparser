@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 interface ATM0/3/0.32 point-to-point
  pvc 2/32
    ubr 1024 48
@@ -61,13 +60,3 @@ interface Cellular0/2/0
  service-policy output policy-cbwfq
  no shutdown
 !
-=======
-c3850-lab#show running-config interface GigabitEthernet1/0/28
-Building configuration...
-
-Current configuration : 65 bytes
-!
-interface GigabitEthernet1/0/28
- ip access-group TEST out
-end
->>>>>>> 559f8a2f554f27bbd34b8ccf5ae0b922b8797282

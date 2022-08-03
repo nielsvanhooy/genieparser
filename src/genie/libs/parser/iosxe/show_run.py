@@ -832,13 +832,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p97 = re.compile(r"^hold-queue\s(?P<hold_queue_out>\d+)\sout$")
 
         # ip flow monitor monitor_ipv4_out output
-        p82 = re.compile(r'^ip\s+flow\s+monitor\s+(?P<flow_monitor_output>\S+)\s+output$')
+        p98 = re.compile(r'^ip\s+flow\s+monitor\s+(?P<flow_monitor_output>\S+)\s+output$')
 
         #ip dhcp snooping information option allow-untrusted
-        p83 = re.compile(r'^ip +dhcp +snooping +information +option +allow-untrusted$')
+        p99 = re.compile(r'^ip +dhcp +snooping +information +option +allow-untrusted$')
 
         #no ip dhcp snooping information option allow-untrusted
-        p84 = re.compile(r'^no +ip +dhcp +snooping +information +option +allow-untrusted$')
+        p100 = re.compile(r'^no +ip +dhcp +snooping +information +option +allow-untrusted$')
 
         # find the service_instance
         # service instance 11 ethernet
@@ -1612,29 +1612,6 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 intf_dict.update({'dual_active_detection': group['dual_active_detection'] == "dual-active-detection"})
                 continue
 
-            # ip flow monitor monitor_ipv4_out output
-            m = p82.match(line)
-            if m:
-                group = m.groupdict()
-                intf_dict.update({'flow_monitor_output': group['flow_monitor_output']})
-                continue
-
-            #ip dhcp snooping information option allow-untrusted
-            m = p83.match(line)
-            if m:
-                group = m.groupdict()
-                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': True})
-                continue
-
-            #ip dhcp snooping information option allow-untrusted
-            m = p84.match(line)
-            if m:
-                group = m.groupdict()
-                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': False})
-                continue
-
-
-
             # media-type rj45
             m = p82.match(line)
             if m:
@@ -1762,6 +1739,20 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'flow_monitor_output': group['flow_monitor_output']})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p99.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': True})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p100.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': False})
                 continue
 
 

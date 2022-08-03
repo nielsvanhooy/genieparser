@@ -1,6 +1,5 @@
 expected_output = {
     "interfaces": {
-<<<<<<< HEAD
         "ATM0/3/0.32": {
             "pvc_vp": 2,
             "pvc_vc": 32,
@@ -59,10 +58,6 @@ expected_output = {
             "ip_negotiated": True,
             "load_interval": "30",
             "output_policy": "policy-cbwfq"
-=======
-        "GigabitEthernet1/0/28": {
-            "acl": {"outbound": {"acl_name": "TEST", "direction": "out"}}
->>>>>>> 559f8a2f554f27bbd34b8ccf5ae0b922b8797282
         }
     }
 }
