@@ -60,6 +60,9 @@ IOSXE parsers for the following show commands:
     * show nhrp stats {tunnel}
     * show nhrp stats detail
     * show nhrp stats {tunnel} detail
+    * show ip dhcp binding
+    * show ip dhcp binding | count Active
+    * show ip nhrp summary
     '''
 
 # Python
@@ -1976,7 +1979,9 @@ class ShowIpMfib(ShowIpMfibSchema):
         #LISP0.1, (100.11.11.11, 235.1.3.167) Flags:
         #Tunnel0, VXLAN Decap Flags: F
         #Vlan500, VXLAN v4 Encap (50000, 239.1.1.0) Flags: F
+        #Null0, LISPv4 Decap Flags: RF F NS
         p8 = re.compile(r'^(?P<egress_if>[\w\.\/]+)'
+                        '(\,\s+LISPv4\s*Decap\s*)?'
                         '(\,\s+\(?(?P<egress_rloc>[\w\.]+)(\,\s+)?(?P<egress_underlay_mcast>[\w\.]+)?\)?)?'
                         '(\,\s+VXLAN +(?P<egress_vxlan_version>[v0-9]+)?(\s+)?(?P<egress_vxlan_cap>[\w]+)(\s+)?(\(?(?P<egress_vxlan_vni>[0-9]+)(\,\s+)?(?P<egress_vxlan_nxthop>[0-9\.]+)?\)?)?)?'
 						'\s+Flags\:\s?(?P<egress_flags>F[\s\w]+|[\s\w]+\s+F[\s\w]+|F$|[\s\w]+\s+F$|$)')
@@ -2073,6 +2078,7 @@ class ShowIpMfib(ShowIpMfibSchema):
             #LISP0.1, (100.11.11.11, 235.1.3.167) Flags:
             #Tunnel0, VXLAN Decap Flags: F
             #Vlan500, VXLAN v4 Encap (50000, 239.1.1.0) Flags: F
+            #Null0, LISPv4 Decap Flags: RF F NS
             m=p8.match(line)
 
             if m:
@@ -2949,8 +2955,8 @@ class ShowIpDhcpBinding(ShowIpDhcpBindingSchema):
         # 		Hardware address/
         # 		User name
         # 100.1.0.3       0100.1094.0000.01       Feb 08 2022 11:11 AM    Automatic  Active     TenGigabitEthernet1/0/2
-
-        p1 = re.compile(r'^\s*(?P<ip_address>(\d+\.\d+\.\d+\.\d+))\s+(?P<client_id>([0-9a-f\.]+))\s+(?P<lease_expiration>([a-zA-Z]{3}\s\d{1,2}\s\d{4}\s\d{1,2}\:\d{1,2}\s[a-zA-Z]{2}|Infinite))\s+(?P<type>\w+)\s+(?P<state>\w+)\s+(?P<interface>[\w\/]+)\s*$')
+        # 100.0.0.12      0010.9400.0004          May 13 2022 04:29 PM    Relay      Active     Port-channel40.2
+        p1 = re.compile(r'^\s*(?P<ip_address>(\d+\.\d+\.\d+\.\d+))\s+(?P<client_id>([0-9a-f\.]+))\s+(?P<lease_expiration>([a-zA-Z]{3}\s\d{1,2}\s\d{4}\s\d{1,2}\:\d{1,2}\s[a-zA-Z]{2}|Infinite))\s+(?P<type>\w+)\s+(?P<state>\w+)\s+(?P<interface>[\w\.\-\/]+)\s*$')
 
         # Defines the "for" loop, to pattern match each line of output
         for line in output.splitlines():
@@ -5525,3 +5531,225 @@ class ShowNhrpStatsDetail(ShowIpNhrpStatsDetail, ShowIpNhrpStatsDetailSchema):
             # get output from device
             output = self.device.execute(cmd)
         return super().cli(tunnel=tunnel, output=output)
+
+# ================================================
+# Schema for 'show ip dhcp binding | count Active'
+# ================================================
+class ShowIpDhcpBindingActiveCountSchema(MetaParser):
+    """
+    Schema for show ip dhcp binding
+    """
+    schema = {
+        Optional('dhcp_binding'): {
+            Optional('active_count'): str
+        }
+    }
+
+class ShowIpDhcpBindingActiveCount(ShowIpDhcpBindingActiveCountSchema):
+
+    ''' Parser for "show ip dhcp binding | count Active"'''
+    cli_command = 'show ip dhcp binding | count Active'
+
+    # Defines a function to run the cli_command
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        parsed_dict = {}
+        # Number of lines which match regexp = 0
+        p1 = re.compile(r'^Number of lines which match regexp = (?P<active_count>(\d+))$')
+
+        # Number of lines which match regexp = 0
+        m = p1.match(output)
+
+        parsed_dict.setdefault('dhcp_binding', {})
+        if m:
+            group = m.groupdict()
+            parsed_dict['dhcp_binding']['active_count'] = str(group['active_count'])
+
+        return parsed_dict
+
+
+# =================================================
+#  Schema for 'show ip nhrp summary'
+# =================================================
+class ShowIpNhrpSummarySchema(MetaParser):
+    """schema for show ip nhrp summary"""
+    schema = {
+        'ip_nhrp': {
+            "total": {
+                'entries': int,
+                'size': int,
+                'static_entries': int,
+                'dynamic_entries': int,
+                'incomplete_entries': int
+            },
+            "remote": {
+                'entries': int,
+                'static_entries': int,
+                'dynamic_entries': int,
+                'incomplete_entries': int,
+                'nhop': int,
+                'bfd': int,
+                'default': int,
+                'temporary': int,
+                'route': {
+                    'entries': int,
+                    'rib': int,
+                    'h_rib': int,
+                    'nho_rib': int,
+                    'bgp': int
+                },
+                'lfib': int
+            },
+            "local": {
+                'entries': int,
+                'static_entries': int,
+                'dynamic_entries': int,
+                'incomplete_entries': int,
+                'lfib': int
+            }
+        }
+    }
+
+# ===================================================
+#  Parser for 'show ip nhrp summary'
+# ===================================================
+class ShowIpNhrpSummary(ShowIpNhrpSummarySchema):
+    """Parser for show ip nhrp summary"""
+    cli_command = 'show ip nhrp summary'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        # IP NHRP cache 4 entries, 3072 bytes
+        p1 = re.compile(r'^IP +NHRP +cache +(?P<nhrp_entries>[\d]+) +entries, +(?P<size>[\d]+) +bytes$')
+
+        # 2 static 2 dynamic 0 incomplete
+        p2 = re.compile(r'^(?P<total_static_entries>[\d]+) +static +(?P<total_dynamic_entries>[\d]+) +dynamic +(?P<total_incomplete_entries>[\d]+) +incomplete$')
+
+        # 4 Remote
+        p3 = re.compile(r'(?P<remote_entries>[\d]+) Remote$')
+
+        # 1 nhop 3 bfd
+        p4 = re.compile(r'(?P<nhop>[\d]+) +nhop +(?P<bfd>[\d]+) +bfd$')
+
+        # 0 default 0 temporary
+        p5 = re.compile(r'^(?P<default>[\d]+) +default +(?P<temporary>[\d]+) +temporary$')
+
+        # 2 route
+        p6 = re.compile(r'^(?P<total>[\d]+) +route$')
+
+        # 2 rib (2 H 0 nho)
+        p7 = re.compile(r'^(?P<rib>[\d]+) +rib +.(?P<h_rib>[\d]+) +H +(?P<nho_rib>[\d]+) +nho.$')
+
+        # 0 bgp
+        p8 = re.compile(r'^(?P<bgp>[\d]+) +bgp$')
+
+        # 0 lfib
+        p9 = re.compile(r'(?P<lfib>[\d]+) +lfib$')
+
+        # 0 Local
+        p10 = re.compile(r'^(?P<local>[\d]+) +Local$')
+
+        # initial return dictionary
+
+        ret_dict = {}
+
+        for line in output.splitlines():
+            line=line.strip()
+
+            # IPv6 NHRP cache 4 entries, 3072 bytes
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                ip_nhrp = ret_dict.setdefault('ip_nhrp', {})
+                target_dict = ip_nhrp.setdefault('total',{})
+                target_dict.update({
+                    'entries': int(group['nhrp_entries']),
+                    'size': int(group['size'])
+                })
+                continue
+
+            # 2 static 2 dynamic 0 incomplete
+            m = p2.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict.update({
+                    'static_entries': int(group['total_static_entries']),
+                    'dynamic_entries': int(group['total_dynamic_entries']),
+                    'incomplete_entries': int(group['total_incomplete_entries'])
+                })
+                continue
+
+            # 4 Remote
+            m = p3.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict = ip_nhrp.setdefault('remote',{})
+                target_dict.update({'entries': int(group['remote_entries'])})
+                continue
+
+            # 1 nhop 3 bfd
+            m = p4.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict.update({'nhop': int(group['nhop']), 'bfd': int(group['bfd'])})
+                continue
+
+            # 0 default 0 temporary
+            m = p5.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict.update({
+                    'default': int(group['default']),
+                    'temporary': int(group['temporary'])
+                })
+                continue
+
+            # 2 route
+            m = p6.match(line)
+            if m:
+                group = m.groupdict()
+                route = target_dict.setdefault('route',{})
+                route.update({'entries': int(group['total'])})
+                continue
+
+            # 2 rib (2 H 0 nho)
+            m = p7.match(line)
+            if m:
+                group = m.groupdict()
+                route.update({
+                    'rib': int(group['rib']),
+                    'h_rib': int(group['h_rib']),
+                    'nho_rib': int(group['nho_rib'])
+                })
+                continue
+
+            # 0 bgp
+            m = p8.match(line)
+            if m:
+                group = m.groupdict()
+                route.update({'bgp': int(group['bgp'])})
+                continue
+
+            # 0 lfib
+            m = p9.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict.update({'lfib': int(group['lfib'])})
+                continue
+
+            # 0 Local
+            m = p10.match(line)
+            if m:
+                group = m.groupdict()
+                target_dict = ip_nhrp.setdefault('local',{})
+                target_dict.update({'entries': int(group['local'])})
+                continue
+
+        return ret_dict
+
+
+

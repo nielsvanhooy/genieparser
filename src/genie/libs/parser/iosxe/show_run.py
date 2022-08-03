@@ -93,7 +93,7 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
 
         # policy-map L3VPN-out_child
         # policy-map type queueing child
-                # p1_1 = re.compile(r'^policy-map +(?P<policy_map>([\w\-\_]+))$')
+        # p1_1 = re.compile(r'^policy-map +(?P<policy_map>([\w\-\_]+))$')
         p1_1 = re.compile(r'^policy-map(\s+type\s+queueing\s+|\s+)(?P<policy_map>([\w\-\_]+))$')
 
         # class ARP_in
@@ -375,7 +375,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('load_interval'): str,
                 Optional('mab'): bool,
                 Optional('negotiation_auto'): bool,
-                                Optional('cdp'): str,
+                Optional('cdp'): str,
                 Optional('port_speed'): str,
                 Optional('port_duplex'): str,
                 Optional('snmp_trap_link_status'): bool,
@@ -442,6 +442,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 },
                 Optional('stackwise_virtual_link'): int,
                 Optional('dual_active_detection'): bool,
+                Optional('ip_dhcp_snooping_information_option_allow_untrusted'): bool,
                 Optional('media_type'): str,
                 Optional('fhrps'): {
                     Any(): {
@@ -519,12 +520,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         config_dict = {}
 
         # interface GigabitEthernet0
+        # p1 = re.compile(r'^interface +(?P<interface>[\S]+)$') NvH
         p1 = re.compile(r'^interface +(?P<interface>.*?)((?=\s)|$)')
 
         # description "Boot lan interface"
         # description ISE Controlled Port
+        #p2 = re.compile(r'^description +(?P<description>[\S\s]+)$') NvH
         p2 = re.compile(r'^description\s+(?P<description>.*)$')
-
         # vrf forwarding Mgmt-intf
         # ip vrf forwarding oam
         p3 = re.compile(r'^(ip )?vrf +forwarding +(?P<vrf>[\S\s]+)$')
@@ -832,12 +834,20 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # ip flow monitor monitor_ipv4_out output
         p98 = re.compile(r'^ip\s+flow\s+monitor\s+(?P<flow_monitor_output>\S+)\s+output$')
 
+        #ip dhcp snooping information option allow-untrusted
+        p99 = re.compile(r'^ip +dhcp +snooping +information +option +allow-untrusted$')
+
+        #no ip dhcp snooping information option allow-untrusted
+        p100 = re.compile(r'^no +ip +dhcp +snooping +information +option +allow-untrusted$')
+
         # find the service_instance
         # service instance 11 ethernet
-        p_find_service_instance = re.compile(r"^service instance\s(?P<service_instance>\d+) ethernet$")
+        p_find_service_instance = re.compile(
+            r"^service instance\s(?P<service_instance>\d+) ethernet$")
 
         # bridge-domain 11 split-horizon group 0
-        p_service_instance_bridge_domain = re.compile(r"bridge-domain\s(?P<bridge_domain>\d+).*$")
+        p_service_instance_bridge_domain = re.compile(
+            r"bridge-domain\s(?P<bridge_domain>\d+).*$")
 
         # recycle p7 pattern
         # encapsulation dot1q 11
@@ -849,42 +859,53 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # description hoort bij BDI15 TEST2
         p_service_instance_description = p2
 
-        p_find_fhrp = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
+        p_find_fhrp = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
 
         # standby 20 authentication cisco
-        p_fhrp_authentication_plain = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication\s+(?P<encryption_string>\w+)$")
+        p_fhrp_authentication_plain = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication\s+(?P<encryption_string>\w+)$")
 
         # vrrp 100 authentication md5 key-string 7 070C285F4D06
-        p_fhrp_authentication_key_string = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
+        p_fhrp_authentication_key_string = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
 
         # vrrp 100 ip 1.1.1.2
         # standby 100 ip 1.1.1.2
-        p_fhrp_ips = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(ip|ipv4)\s+(?P<ips>.*)$")
+        p_fhrp_ips = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(ip|ipv4)\s+(?P<ips>.*)$")
 
         # vrrp 100 description hatseflats
         # standby 100 description hatseflats
-        p_fhrp_description = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(description|name)\s+(?P<description>.*)$")
+        p_fhrp_description = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(description|name)\s+(?P<description>.*)$")
 
         # vrrp 100 priority 90
         # standby 100 priority 90
-        p_fhrp_priority = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+priority\s(?P<priority>\d+)$")
+        p_fhrp_priority = re.compile(
+            r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+priority\s(?P<priority>\d+)$")
 
         # standby 1 timers msec 150 160
-        p_hsrp_timers = re.compile(r"^(?P<fhrp_protocol>(standby))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
+        p_hsrp_timers = re.compile(
+            r"^(?P<fhrp_protocol>(standby))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
 
         #  vrrp 110 timers advertise msec 50
-        p_vrrp_timers = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers advertise\s(?P<timers>.*)$")
+        p_vrrp_timers = re.compile(
+            r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers advertise\s(?P<timers>.*)$")
 
         #  vrrp 110 timers learn
-        p_vrrp_learn = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>learn)$")
+        p_vrrp_learn = re.compile(
+            r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>learn)$")
 
         # we want to know if an interface disabled the default vrrp preempt.
         # no vrrp 120 preempt
-        p_fhrp_no_preempt_vrrp = re.compile(r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt")
+        p_fhrp_no_preempt_vrrp = re.compile(
+            r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt")
 
         # and for hsrp it must be explicitly defined if preempt should be used
         # standby 10 preempt
-        p_fhrp_preempt_hsrp = re.compile(r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt")
+        p_fhrp_preempt_hsrp = re.compile(
+            r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt")
 
         for line in output.splitlines():
             line = line.strip()
@@ -1507,6 +1528,26 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                     }
                 continue
 
+            # need to test
+            # # ip access-group DELETE_ME in ; ip access-group TEST-OUT out
+            # m = p72.match(line)
+            # if m:
+            #     acl = intf_dict.setdefault('acl', {})
+            #     group = m.groupdict()
+            #     if group['direction'] == 'in':
+            #
+            #         inbound_dict = acl.setdefault('inbound', {})
+            #         inbound_dict['acl_name'] = group['acl_name']
+            #         inbound_dict['direction'] = group['direction']
+            #         continue
+            #
+            #     elif group['direction'] == 'out':
+            #         outbound_dict = acl.setdefault('outbound', {})
+            #         outbound_dict['acl_name'] = group['acl_name']
+            #         outbound_dict['direction'] = group['direction']
+            #         continue
+
+
             # lisp mobility 20_1_1_0-global-IPV4
             m = p73.match(line)
             if m:
@@ -1568,7 +1609,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p81.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict.update({'dual_active_detection': group[                                             'dual_active_detection'] == "dual-active-detection"})
+                intf_dict.update({'dual_active_detection': group['dual_active_detection'] == "dual-active-detection"})
                 continue
 
             # media-type rj45
@@ -1698,6 +1739,20 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'flow_monitor_output': group['flow_monitor_output']})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p99.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': True})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p100.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': False})
                 continue
 
 
@@ -1884,6 +1939,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                         and intf_dict["encapsulation_dot1q"]:
                     del intf_dict["encapsulation_dot1q"]
                     del intf_dict['description']
+
+
 
         return config_dict
 
@@ -2311,6 +2368,7 @@ class ShowRunAllSectionInterfaceSchema(MetaParser):
                 Optional('switchport_block_multicast'): bool,
                 Optional('switchport_vepa_enabled'): bool,
                 Optional('ip_arp_inspection_trust'): bool,
+                Optional('ip_dhcp_snooping_information_option_allow_untrusted'): bool,
             }
         }
     }
@@ -2450,6 +2508,12 @@ class ShowRunAllSectionInterface(ShowRunAllSectionInterfaceSchema):
 
         # no access-session closed
         p38 = re.compile(r'^no +access-session +closed$')
+
+        #ip dhcp snooping information option allow-untrusted
+        p39 = re.compile(r'^ip +dhcp +snooping +information +option +allow-untrusted$')
+
+        # no ip dhcp snooping information option allow-untrusted
+        p40 = re.compile(r'^no +ip +dhcp +snooping +information +option +allow-untrusted$')
 
         for line in output.splitlines():
             line = line.strip()
@@ -2718,6 +2782,20 @@ class ShowRunAllSectionInterface(ShowRunAllSectionInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'access_session_closed': False})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p39.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': True})
+                continue
+
+            #ip dhcp snooping information option allow-untrusted
+            m = p40.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': False})
                 continue
 
         return config_dict
