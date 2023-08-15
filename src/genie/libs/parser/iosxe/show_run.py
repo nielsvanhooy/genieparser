@@ -54,6 +54,7 @@ class ShowRunPolicyMapSchema(MetaParser):
                         Optional('service_policy'): str,
                         Optional('service_policy_input'): str,
                         Optional('service_policy_output'): str,
+                        Optional('random_detect'): list,
                     },
                 }
             },
@@ -113,7 +114,8 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
         p4 = re.compile(r'^set +qos-group +(?P<qos_group>(\w+))$')
 
         # bandwidth percent 25
-        p5 = re.compile(r'^bandwidth percent +(?P<bandwidth_percent>(\d+))$')
+        # bandwidth remaining percent
+        p5 = re.compile(r'^(bandwidth|bandwidth remaining) percent +(?P<bandwidth_percent>(\d+))$')
 
         # priority level 2
         p6_1 = re.compile(r'^priority +level +(?P<priority_level>(\d+))$')
@@ -126,10 +128,14 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
 
         # set dscp ef
         # set dscp 46
-        p8 = re.compile(r'^set +dscp +(?P<dscp>(\w+))$')
+        p8 = re.compile(r'^(set|set ip) +dscp +(?P<dscp>(\w+))$')
 
         # set cos 0
         p9 = re.compile(r'^set +cos +(?P<cos>(\d+))$')
+
+        #   random-detect dscp-based
+        #   random-detect ecn
+        p10 = re.compile(r'^random-detect (?P<random_detect>.*)$')
 
         for line in out.splitlines():
 
@@ -147,6 +153,9 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
             # class ARP_in
             m = p1_2.match(line)
             if m:
+                # every "class" can have random_detect information
+                # so with each new class new we set a new list
+                random_detect_list = []
                 group = m.groupdict()
                 class_name = m.groupdict()['class_name']
                 if 'class' not in config_dict['policy_map']:
@@ -286,6 +295,13 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
                         {k: v for k, v in group.items() if v})
                 continue
 
+            m = p10.match(line)
+            if m:
+                random_detect = m.groupdict()['random_detect']
+                random_detect_list.append(random_detect)
+                config_dict['policy_map'][policy_map]['class'][class_name]\
+                ['random_detect'] = random_detect_list
+
         return config_dict
 
 
@@ -313,6 +329,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('trust_device'): str,
                 Optional('carrier_delay'): list,
                 Optional('shutdown'): bool,
+                Optional("encapsulation_ppp"): bool,
                 Optional('encapsulation_dot1q'): str,
                 Optional('description'): str,
                 Optional('dot1x_pae_authenticator'): bool,
@@ -339,6 +356,13 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('ipv4'): {
                     'ip': str,
                     'netmask': str,
+                },
+                Optional('ipv4_secondaries'): {
+                    Any(): {
+                        'ip': str,
+                        'netmask': str,
+                        'primary': bool,
+                    },
                 },
                 Optional('ipv6'): list,
                 Optional('ipv6_ospf'): {
@@ -447,6 +471,7 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional('stackwise_virtual_link'): int,
                 Optional('dual_active_detection'): bool,
                 Optional('ip_dhcp_snooping_information_option_allow_untrusted'): bool,
+                Optional('duplex'): str,
                 Optional('speed'): int,
                 Optional('speed_nonegotiate'): bool,
                 Optional('isis'): {
@@ -457,6 +482,49 @@ class ShowRunInterfaceSchema(MetaParser):
                                 Optional('metric'): int,
                             }
                         }
+                    }
+                },
+                Optional('media_type'): str,
+                Optional('fhrps'): {
+                    Any(): {
+                        Optional("encryption_string"): str,
+                        Optional("encryption_level"): str,
+                        Optional("fhrp_description"): str,
+                        Optional("group_id"): str,
+                        Optional("ips"): list,
+                        Optional("vrrp_preempt"): bool,
+                        Optional("hsrp_preempt"): bool,
+                        Optional("hsrp_preempt"): bool,
+                        Optional("priority"): str,
+                        Optional("protocol"): str,
+                        Optional("hsrp_timers"): str,
+                        Optional("vrrp_timers"): str,
+                        Optional("vrrp_learn"): bool,
+                    }
+                },
+                Optional("dialer_pool"): str,
+                Optional("mtu"): str,
+                Optional("chap_hostname"): str,
+                Optional("chap_password"): str,
+                Optional("chap_encryption"): int,
+                Optional("pap_username"): str,
+                Optional('pap_password'): str,
+                Optional("pppoe_max_payload"): int,
+                Optional("ip_helpers"): list,
+                Optional("pvc_vp"): int,
+                Optional("pvc_vc"): int,
+                Optional("pvc_ubr"): str,
+                Optional("pvc_vbr_nrt"): str,
+                Optional('ip_negotiated'): bool,
+                Optional("hold_queue_in"): int,
+                Optional("hold_queue_out"): int,
+                Optional("service_instances"): {
+                    Any(): {
+                        Optional("service_instance"): str,
+                        Optional("bridge_domain"): str,
+                        Optional("dot1q"): str,
+                        Optional("service_policy"): str,
+                        Optional("description"): str,
                     }
                 }
             }
@@ -494,7 +562,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         config_dict = {}
 
         # interface GigabitEthernet0
-        p1 = re.compile(r'^interface +(?P<interface>[\S]+)$')
+        p1 = re.compile(r'^interface +(?P<interface>.*?)((?=\s)|$)')
 
         # description "Boot lan interface"
         # description ISE Controlled Port
@@ -507,6 +575,9 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         # ip address 10.1.21.249 255.255.255.0
         p4 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)$')
 
+        # ip address 10.1.21.249 255.255.255.0 secondary
+        p4_1 = re.compile(r'^ip +address +(?P<ip>[\S]+) +(?P<netmask>[\S]+)\s(?P<secondary>secondary)$')
+
         # ipv6 address 2001:db8:4:1::1/64
         # ipv6 address 2001:db8:400:1::2/112
         p5 = re.compile(r'^ipv6 address +(?P<ipv6>.+)$')
@@ -515,7 +586,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p6 = re.compile(r'^(?P<shutdown>shutdown)$')
 
         # encapsulation dot1Q 201
-        p7 = re.compile(r'^encapsulation +dot1Q +(?P<dot1q>[\d]+)$')
+        p7 = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>[\d]+)$')
+
+        # encapsulation ppp
+        p7_1 = re.compile(r"^encapsulation ppp$")
 
         # carrier-delay up 60
         # carrier-delay down 60
@@ -681,10 +755,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p58 = re.compile(r"^mpls ip$")
 
         # service-policy input AutoQos-4.0-CiscoPhone-Input-Policy
-        p59 = re.compile(r'^service-policy\s+input\s+(?P<input_policy>\S+)$')
+        p59 = re.compile(r'^service-policy\s+(in|input)\s+(?P<input_policy>\S+)$')
 
         # service-policy output AutoQos-4.0-Output-Policy
-        p60 = re.compile(r'^service-policy\s+output\s+(?P<output_policy>\S+)$')
+        p60 = re.compile(r'^service-policy\s+(out|output)\s+(?P<output_policy>\S+)$')
 
         # switchport port-security mac-address sticky 1020.4bb1.6f2f
         p61 = re.compile(r"^switchport port-security mac-address sticky (?P<value>([a-fA-F\d]{4}\.){2}[a-fA-F\d]{4})$")
@@ -832,13 +906,125 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p107 = re.compile(r'^\s*mka pre-shared-key key-chain +(?P<mka_primary_keychain>\S+) fallback-key-chain +(?P<mka_fallback_keychain>\S+)')
 
         # ip mtu 1468
-        p108 = re.compile(r'^\s*ip mtu (?P<mtu>\d+)')
+        p108 = re.compile(r'^\s*(ip mtu|mtu)\s+(?P<mtu>\d+)')
         
         # ip flow monitor m4in sampler fnf_sampler input
         p109 = re.compile(r'^ip +flow +monitor +(?P<flow_monitor_in_sampler>[\w]+) +sampler +(?P<input_sampler>[\w]+) +input$')
 
         #  ip flow monitor m4out sampler fnf_sampler output
         p110 = re.compile(r'^ip +flow +monitor +(?P<flow_monitor_out_sampler>[\w]+) +sampler +(?P<output_sampler>[\w]+) +output$')
+
+        # duplex full / duplex half / duplex auto
+        p111 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half|auto))$")
+
+        # below matches
+        # dialer pool-member 1
+        # pppoe-client dial-pool-number 1
+        p112 = re.compile(r"^(pppoe-client dial-pool-number|dialer (pool-member|pool))\s(?P<pool_number>\d+)$")
+
+
+        # matches if standby or vrrp is visible in config
+        p113 = re.compile(r"(standby|vrrp)")
+
+        # ppp chap hostname hostname
+        p114 = re.compile(r"^ppp chap hostname\s(?P<chap_hostname>.*)$")
+
+        # ppp chap password 0 password
+        # ppp chap password 7 08345F4B1B48
+        p115 = re.compile(r"^ppp chap password\s(?P<chap_encryption>\d+)\s+(?P<chap_encryption_string>.*)$")
+
+        # ppp pap sent-username cisco password myfirstpassword
+        p116 = re.compile(r"^ppp pap sent-username\s(?P<pap_username>.*?)(?=\s)\spassword\s(?P<pap_password>.*)$")
+
+        # pppoe-client ppp-max-payload 1500
+        p117 = re.compile(r"^pppoe-client ppp-max-payload\s(?P<pppoe_max_payload>\d+)$")
+
+        # ip helper-address 158.67.245.51
+        p118 = re.compile(r"^ip\shelper-address\s(?P<ip_helper>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$")
+
+        # pvc 2/32
+        p119 = re.compile(r"^pvc\s(?P<pvc_vp>\d+)\/(?P<pvc_vc>\d+)$")
+
+        # ubr 1024 48
+        p120 = re.compile(r"^ubr(\+|)\s(?P<ubr_settings>.*)$")
+
+        # ip address negotiated
+        p121 = re.compile(r"^ip address negotiated$")
+
+        # vbr-nrt 128 256
+        p122 = re.compile(r"^vbr-nrt\s(?P<vbr_nrt>.*)$")
+
+        # hold-queue 500 in
+        p123 = re.compile(r"^hold-queue\s(?P<hold_queue_in>\d+)\sin$")
+
+        # hold-queue 200 out
+        p124 = re.compile(r"^hold-queue\s(?P<hold_queue_out>\d+)\sout$")
+
+        # ip flow monitor monitor_ipv4_out output
+        p125 = re.compile(r'^ip\s+flow\s+monitor\s+(?P<flow_monitor_output>\S+)\s+output$')
+
+        # ip dhcp snooping information option allow-untrusted
+        p126 = re.compile(r'^ip +dhcp +snooping +information +option +allow-untrusted$')
+
+        # no ip dhcp snooping information option allow-untrusted
+        p127 = re.compile(r'^no +ip +dhcp +snooping +information +option +allow-untrusted$')
+
+
+        p128 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)")
+        # standby 20 authentication cisco
+
+        p129 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication\s+(?P<encryption_string>\w+)$")
+        # vrrp 100 authentication md5 key-string 7 070C285F4D06
+
+        p130 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+authentication md5 key-string\s(?P<encryption_level>\d+)\s(?P<encryption_string>.*)$")
+
+        # vrrp 100 ip 1.1.1.2
+        # standby 100 ip 1.1.1.2
+        p131 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(ip|ipv4)\s+(?P<ips>.*)$")
+
+        # vrrp 100 description hatseflats
+        # standby 100 description hatseflats
+        p132 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+(description|name)\s+(?P<description>.*)$")
+
+        # vrrp 100 priority 90
+        # standby 100 priority 90
+        p133 = re.compile(r"^(?P<fhrp_protocol>(standby|vrrp))\s+(?P<group_id>\d+)\s+priority\s(?P<priority>\d+)$")
+
+        # standby 1 timers msec 150 160
+        p134 = re.compile(r"^(?P<fhrp_protocol>(standby))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>.*)$")
+
+        #  vrrp 110 timers advertise msec 50
+        p135 = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers advertise\s(?P<timers>.*)$")
+
+        #  vrrp 110 timers learn
+        p136 = re.compile(r"^(?P<fhrp_protocol>(vrrp))\s+(?P<group_id>\d+)\s+timers\s(?P<timers>learn)$")
+
+        # we want to know if an interface disabled the default vrrp preempt.
+        # no vrrp 120 preempt
+        p137 = re.compile(r"^no (?P<fhrp_protocol>vrrp)\s+(?P<group_id>\d+)\s+preempt")
+
+        # and for hsrp it must be explicitly defined if preempt should be used
+        # standby 10 preempt
+        p138 = re.compile(r"(?P<fhrp_protocol>standby)\s+(?P<group_id>\d+)\s+preempt")
+
+        # media-type rj45
+        p139 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
+
+        # find the service_instance
+        # service instance 11 ethernet
+        p_find_service_instance = re.compile(r"^service instance\s(?P<service_instance>\d+) ethernet$")
+
+        # bridge-domain 11 split-horizon group 0
+        p_service_instance_bridge_domain = re.compile(r"bridge-domain\s(?P<bridge_domain>\d+).*$")
+
+        # recycle p7 pattern
+        # encapsulation dot1q 11
+        p_service_instance_dot1q = p7
+        # service-policy input AutoQos-4.0-CiscoPhone-Input-Policy
+        p_service_instance_service_policy = p59
+
+        # description belongs to BDI15 TEST2
+        p_service_instance_description = p2
 
         for line in output.splitlines():
             line = line.strip()
@@ -869,11 +1055,22 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p4.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict.update({'ipv4':{
-                                    'ip': group['ip'],
-                                    'netmask': group['netmask']},
-                                })
-                continue
+                intf_dict.update({'ipv4': {
+                    'ip': group['ip'],
+                    'netmask': group['netmask']},
+                })
+
+            # # ip address 10.1.21.249 255.255.255.0 secondary
+            m = p4_1.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict.get("ipv4_secondaries", False):
+                    intf_dict['ipv4_secondaries'] = {}
+                intf_dict['ipv4_secondaries'][group['ip']] = {
+                    'ip': group['ip'],
+                    'netmask': group['netmask'],
+                    'primary': False
+                }
 
             # ipv6 address 2001:db8:4:1::1/64
             m = p5.match(line)
@@ -894,6 +1091,12 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             if m:
                 group = m.groupdict()
                 intf_dict.update({'encapsulation_dot1q': group['dot1q']})
+                continue
+
+            # encapsulation ppp
+            m = p7_1.match(line)
+            if m:
+                intf_dict.update({'encapsulation_ppp': True})
                 continue
 
             # carrier-delay up 60
@@ -1709,6 +1912,318 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                         {'output_sampler': group['output_sampler']})
                 continue
 
+            # duplex full/duplex half
+            m = p111.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'port_duplex': group['port_duplex']})
+                continue
+
+            # dialer pool-member 1
+            # pppoe-client dial-pool-number 1
+            m = p112.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'dialer_pool': group['pool_number']})
+                continue
+
+            # set defaultdict fhrps if standby or vrrp is visible in the interface configuration
+            m = p113.match(line)
+            if m:
+                intf_dict.setdefault('fhrps', {})
+
+            # ppp chap hostname hostname
+            m = p114.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'chap_hostname': group['chap_hostname']})
+                continue
+
+            # ppp chap password 0 password
+            # ppp chap password 7 08345F4B1B48
+            m = p115.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'chap_password': group['chap_encryption_string'],
+                    'chap_encryption': int(group['chap_encryption']),
+                })
+                continue
+
+            # ppp pap sent-username cisco password myfirstpassword
+            m = p116.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'pap_username': group['pap_username'],
+                    'pap_password': group['pap_password'],
+                })
+                continue
+
+            # pppoe-client ppp-max-payload 1500
+            m = p117.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pppoe_max_payload': int(group['pppoe_max_payload'])})
+                continue
+
+            # ip helper-address 158.67.245.51
+            m = p118.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict.get("ip_helpers", False):
+                    intf_dict['ip_helpers'] = []
+                intf_dict['ip_helpers'].append(group['ip_helper'])
+                continue
+
+            # pvc 2/32
+            m = p119.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({
+                    'pvc_vp': int(group['pvc_vp']),
+                    'pvc_vc': int(group['pvc_vc']),
+                })
+                continue
+
+            # ubr 1024 48
+            m = p120.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pvc_ubr': group['ubr_settings']})
+                continue
+
+            # ip address negotiated
+            m = p121.match(line)
+            if m:
+                intf_dict.update({'ip_negotiated': True})
+                continue
+
+            # vbr-nrt 128 256
+            m = p122.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'pvc_vbr_nrt': group['vbr_nrt']})
+                continue
+
+            # hold-queue 500 in
+            m = p123.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'hold_queue_in': int(group['hold_queue_in'])})
+                continue
+
+            # hold-queue 200 out
+            m = p124.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'hold_queue_out': int(group['hold_queue_out'])})
+                continue
+
+            # ip flow monitor monitor_ipv4_out output
+            m = p125.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'flow_monitor_output': group['flow_monitor_output']})
+                continue
+
+            # ip dhcp snooping information option allow-untrusted
+            m = p126.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': True})
+                continue
+
+            # no ip dhcp snooping information option allow-untrusted
+            m = p127.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'ip_dhcp_snooping_information_option_allow_untrusted': False})
+                continue
+
+            # FROM HERE ALL FHRP
+            m = p128.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict['fhrps'].get(group['group_id'], False):
+                    intf_dict['fhrps'].update({
+                        group['group_id']: {
+                            "protocol": "hsrp" if "standby" in group['fhrp_protocol'] else "vrrp",
+                            "group_id": group['group_id'],
+                        }
+                    })
+                    # dont use continue here otherwise
+                    # it wont match the other fhrp settings
+
+            # standby 20 authentication cisco
+            m = p129.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update(
+                    {
+                        "encryption_string": group['encryption_string']
+                    }
+                )
+                continue
+
+            # vrrp 100 authentication md5 key-string 7 070C285F4D06
+            m = p130.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update(
+                    {
+                        "encryption_level": group['encryption_level'],
+                        "encryption_string": group['encryption_string']
+                    }
+                )
+                continue
+
+            # vrrp 100 ip 1.1.1.2
+            # standby 100 ip 1.1.1.2
+            m = p131.match(line)
+            if m:
+                group = m.groupdict()
+                if not intf_dict['fhrps'][group['group_id']].get("ips", False):
+                    intf_dict['fhrps'][group['group_id']]['ips'] = []
+                intf_dict['fhrps'][group['group_id']]['ips'].append(group['ips'])
+                continue
+
+            # vrrp 100 description hatseflats
+            # standby 100 description hatseflats
+            m = p132.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "fhrp_description": group['description']
+                })
+                continue
+
+            # vrrp 100 priority 90
+            # standby 100 priority 90
+            m = p133.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "priority": group['priority']
+                })
+                continue
+
+            # standby 1 timers msec 150 160
+            m = p134.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "hsrp_timers": group['timers'],
+                })
+                continue
+
+            # vrrp 110 timers advertise msec 50
+            m = p135.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "vrrp_timers": group['timers'],
+                })
+                continue
+
+            # vrrp 110 timers learn
+            m = p136.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "vrrp_learn": True if "learn" in group['timers'] else False
+                })
+                continue
+
+            # we want to know if an interface disabled the default vrrp preempt.
+            # no vrrp 120 preempt
+            m = p137.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "vrrp_preempt": False
+                })
+                continue
+
+            # for hsrp it must be explicitly defined if preempt should be used
+            # standby 10 preempt
+            m = p138.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict['fhrps'][group['group_id']].update({
+                    "hsrp_preempt": True
+                })
+                continue
+
+            # media-type rj45
+            m = p139.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update({'media_type': group['media_type']})
+                continue
+
+            m = p_find_service_instance.match(line)
+            if m:
+                service_instance = m.groupdict()['service_instance']
+                # create the service_instance dict
+                if not intf_dict.get("service_instances", False):
+                    intf_dict['service_instances'] = {}
+                intf_dict['service_instances'][service_instance] = {}
+                intf_dict['service_instances'][service_instance]['service_instance'] \
+                    = service_instance
+                # service instance config is extra identented and needs to be kept together.
+                # therefor we search for the block based on the service_instance_id
+                #  service instance 11 ethernet
+                #  encapsulation dot1q 11
+                #  rewrite ingress tag pop 1 symmetric
+                #  bridge-domain 11 split-horizon group 0
+                # !
+                regex = f"service instance\s{service_instance}\sethernet(?P<service_instance_config>[\s\S]*?(?=\n.*?\!))"
+                p_service_instance_config = re.compile(regex)
+                service_instance_config = p_service_instance_config.findall(output)
+                for line in service_instance_config[0].splitlines():
+                    line = line.strip()
+                    m = p_service_instance_bridge_domain.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'bridge_domain'] = group['bridge_domain']
+                        continue
+
+                    m = p_service_instance_dot1q.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'dot1q'] = group['dot1q']
+                        continue
+
+                    m = p_service_instance_service_policy.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'service_policy'] = group['input_policy']
+                        continue
+
+                    m = p_service_instance_description.match(line)
+                    if m:
+                        group = m.groupdict()
+                        intf_dict['service_instances'][service_instance][
+                            'description'] = group['description']
+                        continue
+
+
+        # if an interface has service_instances
+        # we unset the global encapsulation_dot1q
+        # we unset the global description
+        # this is due that the service instances have there encapsulation value and description
+        try:
+            if intf_dict.get("service_instances", False) \
+                    and intf_dict.get("encapsulation_dot1q", False):
+                del intf_dict["encapsulation_dot1q"]
+                del intf_dict['description']
+        except NameError:
+            pass
+
         return config_dict
 
 
@@ -2325,7 +2840,7 @@ class ShowRunAllSectionInterface(ShowRunAllSectionInterfaceSchema):
         p45 = re.compile(r'^\s*mka pre-shared-key key-chain +(?P<mka_primary_keychain>\S+) fallback-key-chain +(?P<mka_fallback_keychain>\S+)')
 
         # ip mtu 1468
-        p46 = re.compile(r'^\s*ip mtu (?P<mtu>\d+)')
+        p46 = re.compile(r'^\s*(ip mtu|mtu)\s+(?P<mtu>\d+)')
 
         for line in output.splitlines():
             line = line.strip()

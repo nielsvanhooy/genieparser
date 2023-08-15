@@ -9,7 +9,8 @@ expected_output = {
             'load_interval': '30', 
             'negotiation_auto': True, 
             'cdp': 'enable', 
-            'mpls_ip': 'enabled', 
+            'mpls_ip': 'enabled',
+            'mtu': 9198,
             'output_policy': 'PYATS_TEST'
         }
     }
