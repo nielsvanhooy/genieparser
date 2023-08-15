@@ -8,25 +8,25 @@ interface GigabitEthernet0/0/5
  hold-queue 500 in
  hold-queue 100 out
  service instance 11 ethernet
-  description hoort bij BDI11 TEST
+  description belongs to BDI11 TEST
   encapsulation dot1q 11
   rewrite ingress tag pop 1 symmetric
   bridge-domain 11 split-horizon group 0
  !
  service instance 15 ethernet
-  description hoort bij BDI15 TEST2
+  description belongs to BDI15 TEST2
   encapsulation dot1q 15
   rewrite ingress tag pop 1 symmetric
   bridge-domain 15 split-horizon group 0
  !
  service instance 21 ethernet
-  description hoort bij BDI21 TEST3
+  description belongs to BDI21 TEST3
   encapsulation dot1q 21
   rewrite ingress tag pop 1 symmetric
   bridge-domain 21 split-horizon group 0
  !
  service instance 99 ethernet
-  description hoort bij BDI TEST4
+  description belongs to BDI99 TEST4
   encapsulation dot1q 99
   rewrite ingress tag pop 1 symmetric
   bridge-domain 99 split-horizon group 0
