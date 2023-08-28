@@ -525,6 +525,7 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("dot1q"): str,
                         Optional("service_policy"): str,
                         Optional("description"): str,
+                        Optional("service_instance_trunked"): bool,
                     }
                 }
             }
@@ -586,7 +587,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p6 = re.compile(r'^(?P<shutdown>shutdown)$')
 
         # encapsulation dot1Q 201
-        p7 = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>[\d]+)$')
+        p7 = re.compile(r'^encapsulation +dot1(q|Q) +(?P<dot1q>([\d]+|[\d\-,]+))$')
 
         # encapsulation ppp
         p7_1 = re.compile(r"^encapsulation ppp$")
@@ -1012,7 +1013,8 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # find the service_instance
         # service instance 11 ethernet
-        p_find_service_instance = re.compile(r"^service instance\s(?P<service_instance>\d+) ethernet$")
+        # service instance service instance trunk 1 ethernet
+        p_find_service_instance = re.compile(r"^(service instance|service instance trunk|)\s(?P<service_instance>\d+) ethernet$")
 
         # bridge-domain 11 split-horizon group 0
         p_service_instance_bridge_domain = re.compile(r"bridge-domain\s(?P<bridge_domain>\d+).*$")
@@ -1035,6 +1037,19 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 interface = m.groupdict()['interface']
                 intf_dict = config_dict.setdefault('interfaces', {})\
                                        .setdefault(interface, {})
+                continue
+
+            try:
+                # there are situations when a config contains the following:
+                # !
+                # ip vrf testvpn
+                #  description PWN-Alert-VPN
+                #  rd 10735:1
+                # !
+                # the description regex would match on this.
+                # but since its not part of an interface intf_dict would not exist and crashes
+                intf_dict
+            except UnboundLocalError:
                 continue
 
             # description ISE Controlled Port
@@ -2178,10 +2193,10 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                 #  rewrite ingress tag pop 1 symmetric
                 #  bridge-domain 11 split-horizon group 0
                 # !
-                regex = f"service instance\s{service_instance}\sethernet(?P<service_instance_config>[\s\S]*?(?=\n.*?\!))"
+                regex = f"(service instance|service instance trunk)\s{service_instance}\sethernet(?P<service_instance_config>[\s\S]*?(?=\n.*?\!))"
                 p_service_instance_config = re.compile(regex)
                 service_instance_config = p_service_instance_config.findall(output)
-                for line in service_instance_config[0].splitlines():
+                for line in service_instance_config[0][1].splitlines():
                     line = line.strip()
                     m = p_service_instance_bridge_domain.match(line)
                     if m:
@@ -2195,6 +2210,13 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                         group = m.groupdict()
                         intf_dict['service_instances'][service_instance][
                             'dot1q'] = group['dot1q']
+
+                        if "," in group['dot1q'] or "-" in group['dot1q']:
+                            intf_dict['service_instances'][service_instance][
+                                'service_instance_trunked'] = True
+                        else:
+                            intf_dict['service_instances'][service_instance][
+                                'service_instance_trunked'] = False
                         continue
 
                     m = p_service_instance_service_policy.match(line)
@@ -2224,6 +2246,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         except NameError:
             pass
 
+        print(config_dict)
         return config_dict
 
 
