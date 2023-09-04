@@ -916,7 +916,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
         p110 = re.compile(r'^ip +flow +monitor +(?P<flow_monitor_out_sampler>[\w]+) +sampler +(?P<output_sampler>[\w]+) +output$')
 
         # duplex full / duplex half / duplex auto
-        p111 = re.compile(r"^duplex\s+(?P<port_duplex>(full|half|auto))$")
+        p111 = re.compile(r"^duplex\s+(?P<duplex>(full|half|auto))$")
 
         # below matches
         # dialer pool-member 1
@@ -1931,7 +1931,7 @@ class ShowRunInterface(ShowRunInterfaceSchema):
             m = p111.match(line)
             if m:
                 group = m.groupdict()
-                intf_dict.update({'port_duplex': group['port_duplex']})
+                intf_dict.update({'duplex': group['duplex']})
                 continue
 
             # dialer pool-member 1
