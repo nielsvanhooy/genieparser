@@ -32,3 +32,17 @@ interface GigabitEthernet0/0/5
   bridge-domain 99 split-horizon group 0
  !
 !
+
+
+
+
+Building configuration...
+
+Current configuration : 113 bytes
+!
+interface GigabitEthernet1/0/9
+ no switchport
+ no ip address
+ ip pim sparse-dense-mode
+ ip igmp version 3
+end

@@ -134,6 +134,7 @@ class ShowInterfacesSchema(MetaParser):
                 Optional('tunnel_receive_bandwidth'): int,
                 Optional('tunnel_protection'): str,
                 Optional('tunnel_profile'): str,
+                Optional('carrier_transitions'): int,
                 Optional('queues'): {
                     Optional('input_queue_size'): int,
                     Optional('input_queue_max'): int,
@@ -533,6 +534,9 @@ class ShowInterfaces(ShowInterfacesSchema):
         # Tunnel Protection profile
         p52 = re.compile(r'^Tunnel +protection +via +(?P<tunnel_protection>[\w]+) +\(profile \"(?P<tunnel_profile>[\w]+)\"\)')
 
+        # 3 carrier transitions
+        p53 = re.compile(r'^(?P<carrier_transitions>\d+)\s+carrier transitions$')
+
         interface_dict = {}
         unnumbered_dict = {}
         for line in out.splitlines():
@@ -805,6 +809,7 @@ class ShowInterfaces(ShowInterfacesSchema):
                 group = m.groupdict()
                 sub_dict = interface_dict.setdefault(interface, {})
                 sub_dict['carrier_delay'] = int(group['carrier_delay'])
+                continue
 
             # Asymmetric Carrier-Delay Up Timer is 2 sec
             # Asymmetric Carrier-Delay Down Timer is 10 sec
@@ -819,6 +824,7 @@ class ShowInterfaces(ShowInterfacesSchema):
                     sub_dict['carrier_delay_up'] = int(group['carrier_delay'])
                 else:
                     sub_dict['carrier_delay_down'] = int(group['carrier_delay'])
+                continue
 
             # ARP type: ARPA, ARP Timeout 04:00:00
             m = p13.match(line)
@@ -1253,30 +1259,35 @@ class ShowInterfaces(ShowInterfacesSchema):
             if m:
                 group = m.groupdict()
                 interface_dict[interface].update({'tunnel_protocol': group['tunnel_protocol']})
+                continue
 
             # Tunnel TTL 255
             m = p48.match(line)
             if m:
                 group = m.groupdict()
                 interface_dict[interface].update({'tunnel_ttl': int(group['tunnel_ttl'])})
+                continue
 
             # Tunnel transport MTU 1480 bytes
             m = p49.match(line)
             if m:
                 group = m.groupdict()
                 interface_dict[interface].update({'tunnel_transport_mtu': int(group['tunnel_transport_mtu'])})
+                continue
 
             # Tunnel transmit bandwidth 10000000 (kbps)
             m = p50.match(line)
             if m:
                 group = m.groupdict()
                 interface_dict[interface].update({'tunnel_transmit_bandwidth': int(group['tunnel_transmit_bandwidth'])})
+                continue
 
             # Tunnel receive bandwidth 10000000 (kbps)
             m = p51.match(line)
             if m:
                 group = m.groupdict()
                 interface_dict[interface].update({'tunnel_receive_bandwidth': int(group['tunnel_receive_bandwidth'])})
+                continue
 
             m = p52.match(line)
             if m:
@@ -1285,6 +1296,14 @@ class ShowInterfaces(ShowInterfacesSchema):
                     interface_dict[interface].update({'tunnel_protection': group['tunnel_protection']})
                 if group['tunnel_profile']:
                     interface_dict[interface].update({'tunnel_profile': group['tunnel_profile']})
+                continue
+
+            # 3 carrier transitions
+            m = p53.match(line)
+            if m:
+                group = m.groupdict()
+                interface_dict[interface]['carrier_transitions'] = int(group['carrier_transitions'])
+                continue
 
         # create strucutre for unnumbered interface
         if not unnumbered_dict:
@@ -3225,6 +3244,14 @@ class ShowIpv6Interface(ShowIpv6InterfaceSchema):
                 ret_dict[intf]['addresses_config_method'] = \
                     m.groupdict()['addr_conf_method']
                 continue
+            
+            # Hosts use DHCP to obtain routable addresses.
+            p18_1 = re.compile(r'^Hosts +use +(?P<addr_conf_method>[\w\s]+) +to +obtain +routable +addresses.$')
+            m = p18_1.match(line)
+            if m:
+                ret_dict[intf]['addresses_config_method'] = \
+                    m.groupdict()['addr_conf_method']
+                continue
 
             # Interface is unnumbered. Using address of Loopback0
             p19 = re.compile(r'^Interface +is +unnumbered. +Using +address +of'
@@ -4033,6 +4060,7 @@ class ShowInterfacesTransceiverSchema(MetaParser):
                 Optional('current'): str,
                 Optional('opticaltx'): str,
                 Optional('opticalrx'): str,
+                Optional('max_power'): str
             }
         }
     }
@@ -4060,7 +4088,7 @@ class ShowInterfacesTransceiver(ShowInterfacesTransceiverSchema):
         # Gi1/1      40.6       5.09       0.4     -25.2      N/A
         p = re.compile(r'^(?P<port>([\d\/A-Za-z]+)) +(?P<temp>([\d\.-]+)) '
                        r'+(?P<voltage>([\d\.-]+)) +(?P<current>([\d\.-]+)) '
-                       r'+(?P<opticaltx>(\S+)) +(?P<opticalrx>(\S+))$')
+                       r'+(?P<opticaltx>(\S+)) +(?P<opticalrx>(\S+))(\s+(?P<max_power>\S+)\s+W)?$')
 
         result_dict = {}
         for line in out.splitlines():
@@ -4075,6 +4103,8 @@ class ShowInterfacesTransceiver(ShowInterfacesTransceiverSchema):
                 intf_dict['current'] = group['current']
                 intf_dict['opticaltx'] = group['opticaltx']
                 intf_dict['opticalrx'] = group['opticalrx']
+                if group['max_power']:
+                    intf_dict['max_power'] = group['max_power']
                 continue
 
         return result_dict
@@ -5525,5 +5555,60 @@ class ShowInterfacesVlanMapping(ShowInterfacesVlanMappingSchema):
                 vlan_dict['trans_vlan'] = int(dict_val['trans_vlan'])
                 vlan_dict['operation'] = dict_val['operation']
                 continue
+
+        return ret_dict
+
+# ======================================================
+# Parser for 'show interface <interface> human-readable | i drops'
+# ======================================================
+class ShowInterfaceHumanReadableIncludeDropsSchema(MetaParser):
+    """Schema for show interface human-readable include drops"""
+
+    schema = {
+        'unknown_protocol_drops': int,
+        'size': int,
+        'max': int,
+        'drops': int,
+        'flushes': int,
+        'total_output_drops': int
+    }
+
+class ShowInterfaceHumanReadableIncludeDrops(ShowInterfaceHumanReadableIncludeDropsSchema):
+    """Parser for show interface human-readable include drops"""
+
+    cli_command = 'show interface {interface} human-readable | i drops'
+
+    def cli(self, interface, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command.format(interface=interface))
+            
+        #   Input queue: 0/2000/0/0 (size/max/drops/flushes); Total output drops: 0
+
+        p1 = re.compile(r"^Input queue: (?P<size>\d+)/(?P<max>\d+)/(?P<drops>\d+)/(?P<flushes>\d+)\s+\(size/max/drops/flushes\); Total output drops:\s+(?P<total_output_drops>\d+)$")
+
+        # 0 unknown protocol drops
+        p2 = re.compile(r"^(?P<unknown_protocol_drops>\d+)\s+unknown protocol drops$")
+
+        ret_dict = {}
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            #   Input queue: 0/2000/0/0 (size/max/drops/flushes); Total output drops: 0
+            m = p1.match(line)
+            if m:
+                dict_val = m.groupdict()
+                ret_dict['size'] = int(dict_val['size'])
+                ret_dict['max'] = int(dict_val['max'])
+                ret_dict['drops'] = int(dict_val['drops'])
+                ret_dict['flushes'] = int(dict_val['flushes'])
+                ret_dict['total_output_drops'] = int(dict_val['total_output_drops'])
+                continue
+
+            # 0 unknown protocol drops
+            m = p2.match(line)
+            if m:
+                dict_val = m.groupdict()
+                ret_dict['unknown_protocol_drops'] = int(dict_val['unknown_protocol_drops'])
 
         return ret_dict

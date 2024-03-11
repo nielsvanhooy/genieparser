@@ -99,6 +99,22 @@ class ShowInventory(ShowInventorySchema):
 class ShowEnvironmentAllSchema(MetaParser):
     """Schema for show environment all"""
     schema = {
+        Optional('sensor_list'): {
+            'location':{ 
+                Any():{
+                    'sensor':{
+                        Any():{
+                            'state': str,
+                            'reading':str,
+                            Optional('range'):{
+                                'min' : str,
+                                'max': str,
+                            } 
+                        }
+                    }
+                }
+            }
+        },
         'switch': {
             Any(): {
                 'fan': {
@@ -110,7 +126,7 @@ class ShowEnvironmentAllSchema(MetaParser):
                 },
                 'power_supply': {
                     Any(): {
-                        'state': str,
+                        Optional('state'): str,
                         Optional('pid'): str,
                         Optional('serial_number'): str,
                         'status': str,
@@ -119,7 +135,7 @@ class ShowEnvironmentAllSchema(MetaParser):
                         Optional('watts'): str
                     }
                 },
-                'system_temperature_state': str,
+                Optional('system_temperature_state'): str,
                 Optional('inlet_temperature'): {
                     'value': str,
                     'state': str,
@@ -164,6 +180,11 @@ class ShowEnvironmentAll(ShowEnvironmentAllSchema):
         # initial return dictionary
         ret_dict = {}
 
+        #  Sensor          Location        State               Reading       Range(min-max)
+        #  PS1 Vout        2               GOOD               56125 mV          na
+        #  PS1 Vin         2               GOOD              205000 mV        90 - 264
+        p0 = re.compile(r'^(?P<sensor>(\w+ \w+))\s+(?P<location>\d)\s+(?P<state>(\w+( \w+)?))\s+(?P<reading>(\w+ \w+))\s+(?P<min>[\w ]+)(( - )?(?P<max>[\w]+)?)$')
+
         # Switch 1 FAN 1 is OK
         p1 = re.compile(r'^Switch +(?P<switch>\d+) +FAN +(?P<fan>\d+) +is +(?P<state>[\w\s]+)$')
 
@@ -173,7 +194,12 @@ class ShowEnvironmentAll(ShowEnvironmentAllSchema):
         # Switch   FAN     Speed   State
         # ----------------------------------
         # 1        1       14240     OK
-        p1_2 = re.compile(r'^(?P<switch>\d+)\s+(?P<fan>\d+)\s+(?P<speed>\d+)\s+(?P<state>[\w\s]+)$')
+        p1_2 = re.compile(r'^(?P<switch>\d+)\s+(?P<fan>\d+)\s+(?P<speed>\d+)\s+(?P<state>[\w]+)$')
+        
+        # Switch     FAN     Speed     State     Airflow direction
+        # ---------------------------------------------------
+        # 1        1    5440       OK     Front to Back
+        p1_2_3 = re.compile(r'^(?P<switch>\d+)\s+(?P<fan>\d+)\s+(?P<speed>\d+)\s+(?P<state>[\w]+)\s+(?P<direction>[\w\s]+)$')
 
         # FAN PS-1 is OK
         p2 = re.compile(r'^FAN +PS\-(?P<ps>\d+) +is +(?P<state>[\w\s]+)$')
@@ -209,6 +235,26 @@ class ShowEnvironmentAll(ShowEnvironmentAllSchema):
         for line in out.splitlines():
             line = line.strip()
 
+            #  Sensor          Location        State               Reading       Range(min-max)
+            #  PS1 Vout        2               GOOD               56125 mV          na
+            #  PS1 Vin         2               GOOD              205000 mV        90 - 264
+            m = p0.match(line)
+            if m:
+                group = m.groupdict()
+                sensor_dict = ret_dict.setdefault('sensor_list', {}) \
+                    .setdefault('location', {}).setdefault(group['location'], {}) \
+                        .setdefault('sensor', {}).setdefault(group['sensor'], {})
+                sensor_dict.update({"state": group['state']})
+                sensor_dict.update({"reading": group['reading']})
+                range_dict = sensor_dict.setdefault('range',{})
+                if group['min'] != 'na':
+                    range_dict.update({"min": group['min']})
+                    range_dict.update({"max": group['max']}) 
+                else:
+                    range_dict.update({'min': 'na'})
+                    range_dict.update({'max': 'na'})
+                continue
+
             # Switch 1 FAN 1 is OK
             m = p1.match(line)
             if m:
@@ -233,7 +279,13 @@ class ShowEnvironmentAll(ShowEnvironmentAllSchema):
             # Switch   FAN     Speed   State
             # ----------------------------------
             #   1       1      14240     OK
-            m = p1_2.match(line)
+
+            # Switch     FAN     Speed     State     Airflow direction
+            # ---------------------------------------------------
+            # 1        1    5440       OK     Front to Back
+            m1 = p1_2.match(line)
+            m2 = p1_2_3.match(line)
+            m = m1 if m1 else m2
             if m:
                 group = m.groupdict()
                 switch = group['switch']
@@ -245,6 +297,8 @@ class ShowEnvironmentAll(ShowEnvironmentAllSchema):
                 fan_dict = root_dict.setdefault('fan', {}).setdefault(fan, {})
                 fan_dict.update({'speed': speed,
                                  'state': state})
+                if 'direction' in group:
+                    fan_dict.update({'direction':group['direction']})
                 continue
 
             # FAN PS-1 is OK
@@ -320,9 +374,11 @@ class ShowPlatformHardwareAuthenticationStatusSchema(MetaParser):
         'switch': {
             int: {
                    'mainboard_authentication': str,
-                   'fru_authentication': str,
+                   Optional('fru_authentication'): str,
                    'stack_cable_a_authentication': str,
                    'stack_cable_b_authentication': str,
+                    Optional('stack_adapter_a_authentication'):str,
+                    Optional('stack_adapter_b_authentication'):str,
              },
     },
     }
@@ -354,6 +410,11 @@ class ShowPlatformHardwareAuthenticationStatus(ShowPlatformHardwareAuthenticatio
         p4 = re.compile(r'^Stack Cable A Authentication:\s+(?P<stack_cable_a_authentication>\w+(\s\w+)?)$')
         #    Stack Cable B Authentication: Passed
         p5 = re.compile(r'^Stack Cable B Authentication:\s+(?P<stack_cable_b_authentication>\w+(\s\w+)?)$')
+        # Stack Adapter A Authentication Passed
+        p6 = re.compile(r'^Stack Adapter A (Authentication:|Authenticatio)\s+(?P<stack_adapter_a_authentication>[\s\w]+)$')
+        # Stack Adapter B Authentication Passed
+        p7 = re.compile(r'^Stack Adapter B (Authentication:|Authenticatio)\s+(?P<stack_adapter_b_authentication>[\s\w]+)$')
+
         for line in output.splitlines():
             line = line.strip()
 
@@ -364,30 +425,50 @@ class ShowPlatformHardwareAuthenticationStatus(ShowPlatformHardwareAuthenticatio
                 switch = group['switch']
                 switch_dict = result_dict.setdefault('switch', {})
                 switch_id_dict = switch_dict.setdefault(int(switch), {})
+                continue
 
             #Mainboard Authentication:     Passed
             m = p2.match(line)
             if m:
                 group = m.groupdict()
                 switch_id_dict['mainboard_authentication'] = group['mainboard_authentication']
+                continue
 
             #FRU Authentication:           Not Available
             m = p3.match(line)
             if m:
                 group = m.groupdict()
                 switch_id_dict['fru_authentication'] = group['fru_authentication']
+                continue
 
             #Stack Cable A Authentication: Passed
             m = p4.match(line)
             if m:
                 group = m.groupdict()
                 switch_id_dict['stack_cable_a_authentication'] = group['stack_cable_a_authentication']
+                continue
 
             #Stack Cable B Authentication: Passed
             m = p5.match(line)
             if m:
                 group = m.groupdict()
                 switch_id_dict['stack_cable_b_authentication'] = group['stack_cable_b_authentication']
+                continue
+
+            # Stack Adapter A Authentication Passed
+            m = p6.match(line)
+            if m:
+                group = m.groupdict()
+                switch_id_dict['stack_adapter_a_authentication'] = group['stack_adapter_a_authentication']
+                continue
+
+            # Stack Adapter B Authentication Passed
+            m = p7.match(line)
+            if m:
+                group = m.groupdict()
+                switch_id_dict['stack_adapter_b_authentication'] = group['stack_adapter_b_authentication']
+                continue
+        
         return result_dict
 
 class ShowLicenseAuthorizationSchema(MetaParser):

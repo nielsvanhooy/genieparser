@@ -1,6 +1,5 @@
 """
 show_isis.py
-
 IOSXR parsers for the following show commands:
     * show isis
     * show isis lsp-log
@@ -21,6 +20,7 @@ IOSXR parsers for the following show commands:
     * show isis instance {process_id} neighbors
     * show isis interface brief
     * show isis database
+    * show isis ipv4 topology
 """
 
 # Python
@@ -29,7 +29,7 @@ from netaddr import IPAddress, IPNetwork
 
 # Metaparser
 from genie.metaparser import MetaParser
-from genie.metaparser.util.schemaengine import Schema, Any, Or, Optional
+from genie.metaparser.util.schemaengine import Schema, Any, Or, Optional, ListOf
 from genie.libs.parser.utils.common import Common
 
 #============================================
@@ -2004,7 +2004,7 @@ class ShowIsisSpfLogDetail(ShowIsisSpfLogDetailSchema):
         # 899545ms (since end of last calculation)
         r16 = re.compile(r'^(?P<since_end_of_last_calculation_ms>\d+)ms +\(since '
                 r'+end +of +last +calculation\)$')
-        
+
         # Trigger Prefix:        10.234.81.14/32 (optional field)
         r17 = re.compile(r'^Trigger +Prefix: +(?P<trigger_prefix>\S+) +\(optional +field\)$')
 
@@ -2253,7 +2253,7 @@ class ShowIsisSpfLogDetail(ShowIsisSpfLogDetailSchema):
                 delay_dict = spf_log_dict.setdefault('delay', {})
                 delay_dict['since_end_of_last_calculation'] = delay
                 continue
-            
+
             # Trigger Prefix:        10.234.81.14/32 (optional field)
             result = r17.match(line)
             if result:
@@ -2456,7 +2456,7 @@ class ShowIsisInterfaceSchema(MetaParser):
                             'protocol_state': str,
                             'mtu': int,
                             Optional('snpa'): str,
-                            Optional('layer2_mcast_groups_membership'): {
+                            Optional(Any()): {
                                 Optional('all_level_1_iss'): str,
                                 Optional('all_level_2_iss'): str,
                             },
@@ -2464,6 +2464,7 @@ class ShowIsisInterfaceSchema(MetaParser):
                         Optional('topology'): {
                             Any(): {
                                 Optional('adjacency_formation'): str,
+                                Optional('lsp_rexmit_queue_size'): int,
                                 Optional('state'): str,
                                 Optional('prefix_advertisement'): str,
                                 Optional('protocol_state'): str,
@@ -2698,7 +2699,8 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
         r37 = re.compile(r'SNPA\s*:\s*(?P<snpa>\S+)')
 
         # Layer-2 MCast Groups Membership:
-        r38 = re.compile(r'Layer\-(?P<layer>\d+)\s*MCast\s+Groups\s+Membership:')
+        # Layer-2 Multicast:
+        r38 = re.compile(r'^Layer-(?P<layer>\d+)\s*(?:(?P<mcast>MCast\s+Groups\s+Membership))?(?:(?P<multicast>Multicast))?:$')
 
         # All Level-1 ISs:      Yes
         # All Level-2 ISs:      Yes
@@ -2706,7 +2708,8 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
                          r'(?P<iss_state>\S+)')
 
         # All ISs:              Yes
-        r40 = re.compile(r'All\s+ISs\s*:\s*(?P<all_iss>(Yes|No))')
+        # All ISs:              Listening
+        r40 = re.compile(r'All\s+ISs\s*:\s*(?P<all_iss>(Yes|No|Listening))')
 
         # Extended Circuit Number:  20
         r41 = re.compile(r'^Extended +Circuit +Number: +(?P<extended_circuit_number>\d+)$')
@@ -2767,7 +2770,7 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
         # Bandwidth (L1/L2):    Inactive/Inactive
         r59 = re.compile(r'Bandwidth\s+\(L(?P<level_1>\d+)/L'
                          r'(?P<level_2>\d+)\)\s*:\s*(?P<bandwidth_level_1>\w+)\/(?P<bandwidth_level_2>\w+)')
-        
+
         # Anomaly (L1/L2):    Inactive/Inactive
         r60 = re.compile(r'Anomaly\s+\(L(?P<level_1>\d+)/L'
                          r'(?P<level_2>\d+)\)\s*:\s*(?P<anomaly_level_1>\w+)\/(?P<anomaly_level_2>\w+)')
@@ -3228,12 +3231,17 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
                 continue
 
             # Layer-2 MCast Groups Membership:
+            # Layer-2 Multicast:
             result = r38.match(line)
             if result:
                 group = result.groupdict()
                 layer = int(group['layer'])
-                layer_dict = clns_dict\
-                    .setdefault('layer2_mcast_groups_membership', {})
+                if group['mcast'] != None :
+                    layer_dict = clns_dict\
+                        .setdefault('layer2_mcast_groups_membership', {})
+                if group['multicast'] != None :
+                    layer_dict = clns_dict\
+                        .setdefault('layer2_multicast', {})
 
                 continue
 
@@ -3250,6 +3258,7 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
                 continue
 
             # All ISs:              Yes
+            # All ISs:              Listening
             result = r40.match(line)
             if result:
                 group = result.groupdict()
@@ -3506,7 +3515,7 @@ class ShowIsisInterface(ShowIsisInterfaceSchema):
                 state_status = group['status']
                 sync_status_dict = mpls_dict\
                     .setdefault('ldp_sync', {})
-                
+
                 sync_status_dict['status'] = state_status
                 continue
 
@@ -3622,13 +3631,19 @@ class ShowIsisDatabaseDetailSchema(MetaParser):
                                 Optional('router_cap'): str,
                                 Optional('area_address'): str,
                                 Optional('nlpid'): list,
-                                Optional('mt_srv6_locator'):{
+                                Optional('mt_srv6_locator'): Or({
                                     'locator_prefix': str,
                                     'locator_prefix_length': int,
                                     'd_flag': int,
                                     'metric': int,
                                     'algorithm': int
-                                },
+                                }, ListOf({
+                                    'locator_prefix': str,
+                                    'locator_prefix_length': int,
+                                    'd_flag': int,
+                                    'metric': int,
+                                    'algorithm': int
+                                })),
                                 Optional('ip_address'): str,
                                 Optional('ipv6_address'): str,
                                 Optional('hostname'): str,
@@ -3777,8 +3792,8 @@ class ShowIsisDatabaseDetail(ShowIsisDatabaseDetailSchema):
 
         # Metric: 10         MT (IPv6 Unicast) IPv6 2001:db8:3:3:3::3/128
         # Metric: 10         MT (IPv6 Unicast) IPv6 2001:db8:10:2::/64
-        r9 = re.compile(r'Metric\s*:\s*(?P<metric>\d+)\s+MT\s*\(IPv(4|6)\s+'
-                        r'\w+\)\s*(?P<ip_version>IPv(4|6))\s+(?P<ip_address>\S+)')
+        r9 = re.compile(r'^Metric\s*:\s*(?P<metric>\d+)\s+MT\s*\(IPv(4|6)\s+'
+                        r'\w+\)\s*(?P<ip_version>IPv(4|6))\s+(?P<ip_address>\S+)$')
 
         # Metric: 10   IPv6 (MT-IPv6) 2001:0DB8::/64
         # Metric: 10         IPv6 2001:2:2:2::2/128
@@ -3868,6 +3883,10 @@ class ShowIsisDatabaseDetail(ShowIsisDatabaseDetailSchema):
         r25 = re.compile(r'^SRv6\s+Locator:\s+MT\s+\(.*\)\s+(?P<locator_prefix>[\w:]+)\/'
                          r'(?P<locator_prefix_length>\d+)\s+D:(?P<d_flag>\d+)\s+Metric:\s+'
                          r'(?P<metric>\d+)\s+Algorithm:\s+(?P<algorithm>\d+)$')
+
+        # Metric: 10         MT (IPv6 Unicast) IPv6-Ext-InAr fc00:a000:2000::3/128
+        r26 = re.compile(r'^Metric\s*:\s*(?P<metric>\d+)\s+MT\s*\(IPv(4|6)\s+'
+                        r'\w+\)\s*((?P<ip_version>IPv(4|6))[\-a-zA-Z]*)\s+(?P<ip_address>\S+)$')
 
         parsed_output = {}
 
@@ -4265,13 +4284,43 @@ class ShowIsisDatabaseDetail(ShowIsisDatabaseDetailSchema):
                 d_flag = int(group['d_flag'])
                 metric = int(group['metric'])
                 algorithm = int(group['algorithm'])
+                record ={
+                    'locator_prefix': locator_prefix,
+                    'locator_prefix_length': locator_prefix_length,
+                    'd_flag': d_flag,
+                    'metric': metric,
+                    'algorithm': algorithm
+                }
                 mt_srv6_locator_dict = lspid_dict.setdefault('mt_srv6_locator', {})
-                mt_srv6_locator_dict['locator_prefix'] = locator_prefix
-                mt_srv6_locator_dict['locator_prefix_length'] = locator_prefix_length
-                mt_srv6_locator_dict['d_flag'] = d_flag
-                mt_srv6_locator_dict['metric'] = metric
-                mt_srv6_locator_dict['algorithm'] = algorithm
+                if 'locator_prefix' in mt_srv6_locator_dict:
+                    if not isinstance(mt_srv6_locator_dict, list):
+                        lspid_dict['mt_srv6_locator'] = [lspid_dict.pop('mt_srv6_locator')]
+
+                    lspid_dict['mt_srv6_locator'].append(record)
+                elif isinstance(mt_srv6_locator_dict, list):
+                    if 'locator_prefix' in mt_srv6_locator_dict[0]:
+                        lspid_dict['mt_srv6_locator'].append(record)
+                else:
+                    lspid_dict['mt_srv6_locator'].update(record)
                 continue
+
+            # Metric: 20         MT (IPv6 Unicast) IPv6-Ext-InAr fc00:a000:2000::3/128
+            result = r26.match(line)
+            if result:
+                group = result.groupdict()
+                metric = int(group['metric'])
+                ip_address = group['ip_address']
+                ip_version = group['ip_version'].lower()
+                if 'mt_{ip_version}_reachability' not in lspid_dict:
+                    mt_dict = lspid_dict\
+                        .setdefault('mt_{ip_version}_reachability'\
+                        .format(ip_version=ip_version), {})\
+                        .setdefault(ip_address, {})
+                ip_prefix_list = ip_address.split('/')
+                mt_dict['ip_prefix'] = ip_prefix_list[0]
+                if len(ip_prefix_list) > 1:
+                    mt_dict['prefix_length'] = ip_prefix_list[1]
+                mt_dict['metric'] = metric
 
         return parsed_output
 
@@ -5631,6 +5680,116 @@ class ShowIsisDatabase(ShowIsisDatabaseSchema):
                 level_dict['total_lsp_count'] = int(group['total_lsp_count'])
                 level_dict['local_level'] = int(group['local_level'])
                 level_dict['local_lsp_count'] = int(group['local_lsp_count'])
+                continue
+
+        return result_dict
+
+class ShowIsisIpv4TopologySchema(MetaParser):
+    """Schema for:
+        * show isis ipv4 topology
+    """
+    schema = {
+        'isis': {
+            Any(): {
+                'process_id': str,
+                'routes_found': bool,
+                Optional('level'): {
+                    Any(): {
+                        'level': str,
+                        'system_id': {
+                            Any(): {
+                                Optional('system_id'): str,
+                                Optional('metric'): str,
+                                Optional(Any()): {
+                                    'interface_name': str,
+                                    'system_id': str,
+                                    'metric': str,
+                                    'next_hop': str,
+                                    'snpa': str
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+# ==============================================
+# Parser for 'show isis ipv4 topology'
+# ==============================================
+
+class ShowIsisIpv4Topology(ShowIsisIpv4TopologySchema):
+    """Parser for:
+    * show isis ipv4 topology
+    """
+    cli_command = ['show isis ipv4 topology']
+
+    def cli(self, output=None):
+
+        if output is None:
+            output = self.device.execute(self.cli_command[0])
+
+        result_dict = {}
+
+        # No IS-IS 1 IPv4 Unicast levels found
+        p1 = re.compile(r'^No\s+IS-IS\s+(?P<process_id>\d+)\s+IPv4\s+Unicast\s+levels\s+found$')
+
+        # IS-IS 99 paths to IPv4 Unicast (Level-1) routers
+        # IS-IS CORE paths to IPv4 Unicast (Level-1) routers
+        p2 = re.compile(r'^IS-IS\s+(?P<process_id>\w+)\s+paths\s+to\s+IPv4\s+Unicast\s+\(Level-(?P<level>\d+)\)\s+routers$')
+
+        # PE-9001-1 10 PE-9001-1 Gi0/0/0/1.19 28c7.cebd.7c23
+        # XRv9k-PE1       --
+        # AGG-PE-A        10      AGG-PE-A        Gi0/0/0/0       5001.0002.0001
+        p3 = re.compile(r'^(?P<system_id>[\w-]+)\s+(?P<metric>[\d-]+)'
+                        r'(?:\s+(?P<next_hop>[\w-]+)\s+(?P<interface_name>[\w.\/]+)\s+(?P<snpa>[\w.]+))?$')
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # No IS-IS 1 IPv4 Unicast levels found
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                process_id_dict = result_dict.setdefault('isis', {}). \
+                    setdefault(group['process_id'], {})
+                process_id_dict['process_id'] = group['process_id']
+                process_id_dict['routes_found'] = False
+                continue
+
+            # IS-IS 99 paths to IPv4 Unicast (Level-1) routers
+            # IS-IS CORE paths to IPv4 Unicast (Level-1) routers
+            m = p2.match(line)
+            if m:
+                group = m.groupdict()
+                process_id_dict = result_dict.setdefault('isis', {}). \
+                    setdefault(group['process_id'], {})
+                process_id_dict['process_id'] = group['process_id']
+                process_id_dict['routes_found'] = True
+                level_id_dict = process_id_dict.setdefault('level', {}).setdefault(group['level'], {})
+                level_id_dict['level'] = group['level']
+                continue
+
+            # PE-9001-1 10 PE-9001-1 Gi0/0/0/1.19 28c7.cebd.7c23
+            # XRv9k-PE1       --
+            # AGG-PE-A        10      AGG-PE-A        Gi0/0/0/0       5001.0002.0001
+            m = p3.match(line)
+            if m:
+                group = m.groupdict()
+                if group['interface_name']:
+                    system_id_dict = level_id_dict.setdefault('system_id', {}). \
+                        setdefault(group['system_id'], {}).setdefault(group['interface_name'], {})
+                    system_id_dict['interface_name'] = group['interface_name']
+                else:
+                    system_id_dict = level_id_dict.setdefault('system_id', {}). \
+                        setdefault(group['system_id'], {})
+                system_id_dict['system_id'] = group['system_id']
+                system_id_dict['metric'] = group['metric']
+                if group['next_hop']:
+                    system_id_dict['next_hop'] = group['next_hop']
+                if group['snpa']:
+                    system_id_dict['snpa'] = group['snpa']
                 continue
 
         return result_dict

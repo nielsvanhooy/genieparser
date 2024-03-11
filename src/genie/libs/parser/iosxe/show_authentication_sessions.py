@@ -172,6 +172,9 @@ class ShowAuthenticationSessionsDetailsSuperSchema(MetaParser):
                     Any(): {
                         Optional('iif_id'): str,
                         Optional('ipv6_address'): str,
+                         Optional('ipv6'): {
+                            'ipv6_address': Or(str, list)
+                        },
                         'ipv4_address': str,
                         Optional('user_name'): str,
                         Optional('device_type'): str,
@@ -291,7 +294,7 @@ class ShowAuthenticationSessionsDetailsSuperParser(ShowAuthenticationSessionsDet
         p5 = re.compile(r'^Method +status +list:')
 
         # dot1x            Authc Failed
-        p6 = re.compile(r'^(?P<method>[dot1x|mab]\w+) +(?P<state>(\w+\s\w+)|(\w+))$')
+        p6 = re.compile(r'^(?P<method>[dot1x|mab|webauth]\w+) +(?P<state>(\w+\s\w+)|(\w+))$')
 
         # Runnable methods list:
         p7 = re.compile(r'^Runnable +methods +list:')
@@ -320,6 +323,10 @@ class ShowAuthenticationSessionsDetailsSuperParser(ShowAuthenticationSessionsDet
         # IPv6 Address: fe80::204:61ff
         # IPv6 Address: fe9d:f156::1
         p11 = re.compile(r'^IPv6 +Address\: +(?P<ipv6>\S+?)$')
+
+        # 1555:10::5ced:6cc3:825b:39da
+        # 1555:10::225:1ff:fe00:5
+        p11_1 = re.compile(r'^(?P<address>[\w\:]+)$')
 
         # Server Policies:
         p12 = re.compile(r'^Server +Policies\:$')
@@ -533,6 +540,15 @@ class ShowAuthenticationSessionsDetailsSuperParser(ShowAuthenticationSessionsDet
             if m11:
                 mac_dict.update({'ipv6_address': m11.groupdict()['ipv6']})
 
+                continue
+            
+            # 1555:10::5ced:6cc3:825b:39da
+            # 1555:10::225:1ff:fe00:5            
+            m = p11_1.match(line)                            
+            if m:                         
+                group = m.groupdict()
+                com_dict = mac_dict.setdefault('ipv6', {}).setdefault('ipv6_address', [])      
+                com_dict.append(group['address'])         
                 continue
 
             # Server Policies:

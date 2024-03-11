@@ -3,12 +3,18 @@
 IOSXE parsers for the following show commands:
 
     * show idprom all 
-	* show idprom interface {interface}
+    * show idprom interface {interface}
 '''
 
 from genie.metaparser import MetaParser
 from genie.metaparser.util.schemaengine import Any, Optional
-
+from genie.metaparser.util.schemaengine import Schema, \
+                                         Any, \
+                                         Optional, \
+                                         Or, \
+                                         And, \
+                                         Default, \
+                                         Use
 import re
 
 
@@ -424,6 +430,7 @@ class ShowIdpromInterfaceSchema(MetaParser):
             'serial_number': str, 
             'vendor_name': str,
             'vendor_oui': str,
+            Optional('vendor_part_number'): str,
             'clei_code': str,
             'cisco_part_number': str,
             'device_state': str, 
@@ -494,6 +501,9 @@ class ShowIdpromInterface(ShowIdpromInterfaceSchema):
         
         # Nominal bitrate per channel    = 25GE (25500 Mbits/s)
         p15 = re.compile('^Nominal bitrate per channel\s+=\s+(?P<nominal_bitrate_per_channel>.*)$')
+
+        # Vendor part number                        = AFBR-2CAR10Z-CS1
+        p16 = re.compile('^Vendor part number\s+=\s+(?P<vendor_part_number>\S+)$')
 
         for line in output.splitlines():
             line=line.strip()
@@ -600,8 +610,15 @@ class ShowIdpromInterface(ShowIdpromInterfaceSchema):
             if m:
                 group=m.groupdict()
                 root_dict['nominal_bitrate_per_channel'] = group['nominal_bitrate_per_channel']
-                continue				
-                
+                continue                
+            
+            # Vendor part number                        = AFBR-2CAR10Z-CS1
+            m=p16.match(line)
+            if m:
+                group=m.groupdict()
+                root_dict['vendor_part_number'] = group['vendor_part_number']
+                continue
+
         return ret_dict     
 
 
@@ -620,7 +637,7 @@ class ShowIdpromTanSchema(MetaParser):
             Any(): {
                 'switch_num': int,
                 'part_num': str,
-                'revision_num': int,
+                'revision_num': Or(int, str),
             },
         }
     }
@@ -646,7 +663,7 @@ class ShowIdpromTan(ShowIdpromTanSchema):
         # Top Assy. Part Number           : 68-101195-01
         p2 = re.compile(r"^Top\s+Assy.\s+Part\s+Number\s+:\s+(?P<part_num>\d+-\d+-\d+)$")
         # Top Assy. Revision Number       : 31
-        p3 = re.compile(r"^Top\s+Assy.\s+Revision\s+Number\s+:\s+(?P<revision_num>\d+)$")
+        p3 = re.compile(r"^Top\s+Assy.\s+Revision\s+Number\s+:\s+(?P<revision_num>\S+)$")
 
         ret_dict = {}
 
@@ -676,7 +693,7 @@ class ShowIdpromTan(ShowIdpromTanSchema):
             if m:
                 dict_val = m.groupdict()
                 revision_part_num = dict_val['revision_num']
-                sw_dict['revision_num'] = int(revision_part_num)
+                sw_dict['revision_num'] = int(revision_part_num) if revision_part_num.isnumeric() else revision_part_num
                 continue
 
 

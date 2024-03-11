@@ -1,3 +1,10 @@
 {
   "interface": "Vlan10"
 }
+
+
+
+
+{
+    "interface": "GigabitEthernet1/0/9"
+}

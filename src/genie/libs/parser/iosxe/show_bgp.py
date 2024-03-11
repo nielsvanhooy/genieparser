@@ -2809,7 +2809,8 @@ class ShowBgpAllSummary(ShowBgpSummarySuperParser, ShowBgpSummarySchema):
                    ]
     exclude = ['msg_sent', 'msg_rcvd', 'activity_paths', 'activity_prefixes',
         'bgp_table_version', 'routing_table_version', 'tbl_ver', 'up_down',
-        'attribute_entries', 'dropped', 'established']
+        'attribute_entries', 'dropped', 'established', 'input_queue',
+        'output_queue']
 
 
     def cli(self, address_family='', vrf='',output=None):
@@ -4489,13 +4490,13 @@ class ShowBgpAllNeighbors(ShowBgpNeighborSuperParser, ShowBgpAllNeighborsSchema)
         'opens', 'route_refresh', 'total', 'updates', 'up_time', 'rtto', 'rtv', 'srtt',
         'pmtuager', 'min_rtt', 'irs', 'iss', 'tcp_semaphore', 'foreign_port', 'local_port',
         'reset_reason', 'status_flags', 'dropped', 'established', 'out_of_order',
-        'keepalive', 'retransmit_packet', 'max_rtt', 'mss', 'rcv_scale']
+        'keepalive', 'retransmit_packet', 'max_rtt', 'mss', 'rcv_scale', 'ack_hold', 'fastretransmit']
 
 
     def cli(self, neighbor='', address_family='', output=None):
 
         # Restricted address families
-        restricted_list = ['ipv4 unicast', 'ipv6 unicast']
+        restricted_list = ['ipv4 unicast', 'ipv6 unicast','l2vpn evpn']
 
         # Init vars
         ret_dict = {}
@@ -4700,7 +4701,7 @@ class ShowIpBgpNeighbors(ShowBgpNeighborSuperParser, ShowBgpAllNeighborsSchema):
     def cli(self, neighbor='', address_family='', vrf='', output=None):
 
         # Restricted address families
-        restricted_list = ['ipv4 unicast', 'ipv6 unicast', 'link-state link-state']
+        restricted_list = ['ipv4 unicast', 'ipv6 unicast', 'link-state link-state','l2vpn evpn']
 
         # Init vars
         ret_dict = {}
@@ -4842,7 +4843,7 @@ class ShowBgpNeighborsAdvertisedRoutesSuperParser(ShowBgpNeighborsAdvertisedRout
         p1 = re.compile(r'^\s*For +address +family:'
                             ' +(?P<address_family>[a-zA-Z0-9\s\-\_]+)$')
 
-        p3_1 = re.compile(r'^\s*(?P<status_codes>(s|d|h|\*|\>|i|r|S|m|b|f|x|a|c|t|L|\s)+)?'
+        p3_1 = re.compile(r'^\s*(?P<status_codes>(s|d|h|\*|\>|i|r|S|m|b|f|x|a|c|t|L|\s)+)?(?=[\d|\[])'
                             '(?P<path_type>(i|e|c|l|a|r|I))?(\s)?'
                             '(?P<prefix>[a-zA-Z0-9\.\:\/\[\]\,]+)'
                             '(?: *(?P<next_hop>[a-zA-Z0-9\.\:\/\[\]\,]+))?$')
