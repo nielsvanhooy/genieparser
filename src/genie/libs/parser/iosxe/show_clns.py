@@ -611,7 +611,8 @@ class ShowClnsNeighborsDetail(ShowClnsNeighborsDetailSchema):
         # R7              Gi4           5e00.c0ff.060d      Up     26        L2   M-ISIS
         # R2_xr           Gi2.115       fa16.3eff.9418      Up     26        L1L2 M-ISIS
         # Genie           Te0/3/0       sdfs.0asd.49sd      Up     25        L1   IS-IS //missing neighbor, instead Genie2 shows in JSON.
-        p2 = re.compile(r'^(?P<system_id>[\w\.]+) +(?P<interface>\S+) '
+        # CIP-DC1-FBS-02  Po1.10        2cab.eb4f.3f4f      Up     8         L1L2 IS-IS
+        p2 = re.compile(r'^(?P<system_id>[\w\-\.]+) +(?P<interface>\S+) '
                         r'+(?P<snpa>[\w\.]+) +(?P<state>\w+) +'
                         r'(?P<holdtime>\d+) +(?P<level>[L\d]+) +'
                         r'(?P<protocol>[\S ]+)$')
@@ -770,9 +771,10 @@ class ShowClnsIsNeighborsDetail(ShowClnsIsNeighborsDetailSchema):
         # System Id       Interface     State  Type Priority  Circuit Id         Format
         # R7              Gi4           Up     L2   64        R2.01              Phase V
         # R3_nx           Gi3.115       Up     L1L2 64/64     R1_xe.02           Phase V
-        p2 = re.compile(r'^(?P<system_id>[\w\.]+)\s+(?P<interface>\S+)\s+'
-                        '(?P<state>\w+)\s+(?P<type>\S+)\s+(?P<priority>\d+)'
-                        '(\/\d+)*\s+(?P<circuit_id>[\w\.]+)\s+(?P<format>[\S\s]+)$')
+        # CIP-DC1-FBS-02  Po1.10        Up     L1L2 64/64     CIP-DC1-FBS-02.01  Phase V
+        p2 = re.compile(r'^(?P<system_id>[\w\.\-]+)\s+(?P<interface>\S+)\s+'
+                        '(?P<state>\w+)\s+(?P<type>\S+)\s+(?P<priority>\d+)\s*'
+                        '(\/\d+)*\s+(?P<circuit_id>[\w\.\-]+)\s+(?P<format>[\S\s]+)$')
 
         #   Area Address(es): 49.0002
         p3 = re.compile(r'^Area +Address\(es\): +(?P<area_address>\S+)$')
@@ -806,6 +808,7 @@ class ShowClnsIsNeighborsDetail(ShowClnsIsNeighborsDetailSchema):
 
             # System Id       Interface     State  Type Priority  Circuit Id         Format
             # R7              Gi4           Up     L2   64        R2.01              Phase V
+            # CIP-DC1-FBS-02  Po1.10        Up     L1L2 64/64     CIP-DC1-FBS-02.01  Phase V
             m = p2.match(line)
             if m:
                 group = m.groupdict()

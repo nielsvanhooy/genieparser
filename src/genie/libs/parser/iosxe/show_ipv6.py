@@ -1146,6 +1146,8 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
         mfib_dict = {}
         sub_dict = {}
         outgoing = False
+        egress_data = {}
+        egress_data_update = False
         #Default
         #VRF vrf1
         p1 = re.compile(r'^(VRF\s+)?(?P<vrf>[\w]+)$')
@@ -1156,7 +1158,7 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
         # (2001:70:1:1::10,FF05:1:1::1) Flags: HW
         p3 = re.compile(r'^\((?P<source_address>[\w\:\.\*\/]+)\,'
                      '(?P<multicast_group>[\w\:\.\/]+)\)'
-                     '\s+Flags\:\s+(?P<mfib_flags>[\w\s]+)$')
+                     '\s+Flags\:\s*(?P<mfib_flags>[\w\s]*)$')
         #0x1AF0  OIF-IC count: 0, OIF-A count: 1
         p4 = re.compile(r'\w+ +OIF-IC count: +(?P<oif_ic_count>[\w]+)'
                    '\, +OIF-A count: +(?P<oif_a_count>[\w]+)$')
@@ -1181,9 +1183,10 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
         #  GigabitEthernet1/0/1 Flags: A NS
         #Tunnel0, VXLAN Decap Flags: A
         #Vlan500, VXLAN v6 Encap (50000, 239.1.1.0) Flags: A
+        #Port-channel5 Flags: RA A MA
 
-        p7 = re.compile(r'^(?P<ingress_if>[\w\.\/ ]+)'
-                         r'(\,\s+VXLAN +(?P<ingress_vxlan_version>[v0-9]+)?(\s+)?(?P<ingress_vxlan_cap>[\w]+)(\s+)?(\(?(?P<ingress_vxlan_vni>[0-9]+)(\,\s+)?(?P<ingress_vxlan_nxthop>[0-9\.]+)?\)?)?)?'
+        p7 = re.compile(r'^(?P<ingress_if>[\w\/\.\-\:]+)'
+                         r'(\,\s+VXLAN +(?P<ingress_vxlan_version>[v0-9]+)?(\s+)?(?P<ingress_vxlan_cap>[\w]+)(\s+)?(\(?(?P<ingress_vxlan_vni>[0-9]+)(\,\s+)?(?P<ingress_vxlan_nxthop>[\w:./]+)?\)?)?)?'
                          r' +Flags\: +(?P<ingress_flags>A[\s\w]+|[\s\w]+ +A[\s\w]+|A$)')
 
         #Vlan2001 Flags: F NS
@@ -1192,9 +1195,11 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
         #Tunnel1, VXLAN v6 Decap Flags: F NS
         # Vlan200, VXLAN v4 Encap (10100, 239.1.1.1) Flags: F
         #L2LISP0.1502, L2LISP v6 Decap Flags: F NS
-        p8 = re.compile(r'^(?P<egress_if>[\w\.\/]+)'
+        #LISP0.101, 100:88:88::88 Flags: F
+        #Port-channel5 Flags: RF F NS
+        p8 = re.compile(r'^(?P<egress_if>[\w\/\.\-\:]+)'
                         r'(\,\s+L2LISP\s*v6\s*Decap\s*)?'
-                        r'(\,\s+\(?(?P<egress_rloc>[\w\.]+)(\,\s+)?(?P<egress_underlay_mcast>[\w\.]+)?\)?)?'
+                        r'(\,\s+\(?(?P<egress_rloc>[\w:\.]+)(\,\s+)?(?P<egress_underlay_mcast>[\w\.]+)?\)?)?'
                         r'(\,\s+VXLAN +(?P<egress_vxlan_version>[v0-9]+)?(\s+)?(?P<egress_vxlan_cap>[\w]+)(\s+)?'
                         r'(\(?(?P<egress_vxlan_vni>[0-9]+)(\,\s+)?(?P<egress_vxlan_nxthop>[\w:.]+)?\)?)?)?'
                         r'\s+Flags\:\s?(?P<egress_flags>F[\s\w]+|[\s\w]+\s+F[\s\w]+|F$|[\s\w]+\s+F$|$)')
@@ -1281,8 +1286,10 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
                     ing_intf_dict['ingress_vxlan_cap']=group['ingress_vxlan_cap']
                 if group['ingress_vxlan_version']:
                     ing_intf_dict['ingress_vxlan_version']=group['ingress_vxlan_version']
-                    ing_intf_dict['ingress_vxlan_vni']=group['ingress_vxlan_vni']
+                if group['ingress_vxlan_nxthop']:
                     ing_intf_dict['ingress_vxlan_nxthop']=group['ingress_vxlan_nxthop']
+                if group['ingress_vxlan_vni']:
+                    ing_intf_dict['ingress_vxlan_vni']=group['ingress_vxlan_vni']
                 continue
 
 
@@ -1310,6 +1317,7 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
                     outgoing_interface='{},{}'.format(group['egress_if'], group['egress_rloc'])
 
                 egress_data=sw_data.setdefault('outgoing_interfaces',{}).setdefault(outgoing_interface,{})
+                egress_data_update = True
                 egress_data['egress_flags'] = group['egress_flags']
 
                 if group['egress_underlay_mcast']:
@@ -1326,19 +1334,19 @@ class ShowIpv6Mfib(ShowIpv6MfibSchema):
                 continue
             #CEF: Adjacency with MAC: 01005E010101000A000120010800
             m=p9_1.match(line)
-            if m:
+            if m and egress_data_update:
                 group = m.groupdict()                 
                 egress_data['egress_adj_mac'] = group['egress_adj_mac']
                 continue
             #CEF: Special OCE (discard)
             m=p9_2.match(line)
-            if m:
+            if m and egress_data_update:
                 group = m.groupdict()
                 egress_data['egress_adj_mac'] = group['egress_adj_mac']
                 continue
             #Pkts: 0/0/2    Rate: 0 pps
             m=p10.match(line)
-            if m:
+            if m and egress_data_update:
                 changedict={}
                 for key in m.groupdict().keys():
                   changedict[key] = int(m.groupdict()[key])
@@ -1560,9 +1568,9 @@ class ShowIpv6DhcpBindingSchema(MetaParser):
                         't2': int,
                         'address': {
                             Any(): { # 3001::B151:2E66:32A4:65E9
-                                'preferred_lifetime': int,
-                                'valid_lifetime': int,
-                                'expires': {
+                                'preferred_lifetime': Or(int, str),
+                                'valid_lifetime': Or(int, str),
+                                Optional('expires'): {
                                     'month': str,
                                     'day': int,
                                     'year': int,
@@ -1580,8 +1588,8 @@ class ShowIpv6DhcpBindingSchema(MetaParser):
                         't2': int,
                         'prefix': {
                             Any(): { # 2001:4::/48
-                                'preferred_lifetime': int,
-                                'valid_lifetime': int,
+                                'preferred_lifetime': Or(int, str),
+                                'valid_lifetime': Or(int, str),
                                 'expires': {
                                     'month': str,
                                     'day': int,
@@ -1638,8 +1646,8 @@ class ShowIpv6DhcpBinding(ShowIpv6DhcpBindingSchema):
         p72 = re.compile(r'^Prefix:\s+(?P<ipv6_prefix>\S+)$')
 
         # preferred lifetime 86400, valid lifetime 172800
-        p8 = re.compile(r'^preferred lifetime\s+(?P<preferred_lifetime>\d+),\s+valid lifetime\s+(?P<valid_lifetime>\S+)$')
-
+        # preferred lifetime INFINITY, , valid lifetime INFINITY,
+        p8 = re.compile(r'^preferred lifetime\s+(?P<preferred_lifetime>\w+)(, ,|,)\s+valid lifetime\s+(?P<valid_lifetime>\w+)(,|)$')
         # expires at Feb 17 2022 08:58 AM (172782 seconds)
         p9 = re.compile(r'^(?P<expires>\w+) +at\s+(?P<month>\S+)\s+(?P<day>\d+)\s+(?P<year>\d+)\s+(?P<time>[0-9A-Z :]+)\s+\((?P<remaining_seconds>\d+) +seconds\)$')
 
@@ -1719,9 +1727,13 @@ class ShowIpv6DhcpBinding(ShowIpv6DhcpBindingSchema):
             m = p8.match(line)
             if m:
                 groups = m.groupdict()
+                if (groups['preferred_lifetime']).isdigit():
+                    groups['preferred_lifetime'] = int(groups['preferred_lifetime'])
+                if (groups['valid_lifetime']).isdigit():
+                    groups['valid_lifetime'] = int(groups['valid_lifetime'])
                 address_dict.update({
-                    'preferred_lifetime' : int(groups['preferred_lifetime']),
-                    'valid_lifetime' : int(groups['valid_lifetime'])})
+                    'preferred_lifetime': groups['preferred_lifetime'],
+                    'valid_lifetime': groups['valid_lifetime']})
                 continue
 
             # expires at Feb 17 2022 08:58 AM (172782 seconds)

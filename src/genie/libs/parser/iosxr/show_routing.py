@@ -45,7 +45,9 @@ class ShowCefDetailSchema(MetaParser):
                                             'dependencies': int,
                                             'path': {
                                                 'nhid': str,
+                                                Optional('nhid_hex'): str,
                                                 'path_idx': int,
+                                                Optional('idx_internal'): str,
                                                 Optional('path_idx_nh'): {
                                                     Optional('local_label_nh'): {
                                                         'local_label': int,
@@ -57,11 +59,16 @@ class ShowCefDetailSchema(MetaParser):
                                                     'path_idx_via': str,
                                                 },
                                             },
+                                            Optional('next_hop_vrf'): str,
+                                            Optional('next_hop_table'): str,
+                                            Optional('sid_list'): str,
                                             'via_address': str,
                                             'via_flags': str,
                                         },
                                     },
                                     'load_distribution': {
+                                        Optional('distribution'): str,
+                                        Optional('refcount'): int,
                                         Any(): {
                                             'address': str,
                                             'hash': int,
@@ -100,6 +107,7 @@ class ShowCefDetailSchema(MetaParser):
                                     }
                                 },
                                 'internal': str,
+                                Optional('iid'): str,
                                 'ldi_update_time': str,
                                 'length': int,
                                 'precedence': str,
@@ -115,7 +123,6 @@ class ShowCefDetailSchema(MetaParser):
             }
         }
     }
-
 
 class ShowCefDetail(ShowCefDetailSchema):
     """ Parser for:
@@ -147,8 +154,9 @@ class ShowCefDetail(ShowCefDetailSchema):
         # 10.4.16.16/32, version 13285, internal 0x1000001 0x0 (ptr 0x78b55d78) [2], 0x0 (0x78b064d8), 0xa00 (0x7a1a60a8)
         # fd00::3/128, version 103, SRv6 Headend, internal 0x5000001 0x30 (ptr 0xeb4f580) [1], 0x400 (0xda89410), 0x0 (0xf580648)
         # 10.255.255.224/32, version 2, drop adjacency, internal 0x1000001 0x30 (ptr 0x79125568) [1], 0x0 (0x0), 0x0 (0x0)
+        # ::ffff:10.0.0.1/128, version 32, SRv6 Headend, IID (EVPN-MH), internal 0x1000001 0x0 (ptr 0x78d3fe50) [1], 0x0 (0x0), 0x0 (0x7a0cfaf8)
         p1 = re.compile(r'^(?P<ip>[a-zA-Z0-9:.\/]+), +version +(?P<version>[\d]+),( +drop +(?P<drop>[\w]+),)?(?: SRv6 Headend,*)?' \
-                        r'(?: internal +(?P<internal>.+)+)?$')
+                        r'(?: +IID +\((?P<iid>[\w-]+)\),)?(?: internal +(?P<internal>.+)+)?$')
 
         # Updated Oct 13 18:18:19.680
         p2 = re.compile(r'^Updated +(?P<updated>[\w\s:.]+)$')
@@ -185,18 +193,19 @@ class ShowCefDetail(ShowCefDetailSchema):
         # via 10.55.0.2/32, 4 dependencies, recursive [flags 0x0]
         # via 10.1.15.2/32, 4 dependencies, recursive [flags 0x0]
         p10 = re.compile(r'^via +(?P<via>[\S]+), +(?P<dependencies>[\w]{1,})'
-                         ' +dependencies, +(?P<via_flags>[\w]+)'
-                         ' +\[([\S\s]+)\]$')
+                         r' +dependencies, +(?P<via_flags>[\w]+)'
+                         r' +\[([\S\s]+)\]$')
 
         # path-idx 0 NHID 0x0 [0x78b4cbf8 0x0]
         # path-idx 1 NHID 0x0 [0x78b4fbf8 0x0]
+        # path-idx 0 NHID 0x0 [0x8b001f38 0x0], Internal 0x89d70af0
         p11 = re.compile(r'^path-idx +(?P<idx>[\w]+) +NHID +(?P<nhid>[\S]+)'
-                         ' +\[(?P<nhid_hex>[\w\s]+)\]$')
+                         r' +\[(?P<nhid_hex>[\w\s]+)\](?:, +Internal +(?P<idx_internal>\w+))?$')
 
         # next hop 10.55.0.2/32 via 10.55.0.2/32
         # next hop 10.1.15.2/32 via 10.1.15.2/32
         p12 = re.compile(r'^next +hop +(?P<path_idx_address>[\S]+)'
-                         ' +via +(?P<path_idx_via>[\S]+)$')
+                         r' +via +(?P<path_idx_via>[\S]+)$')
 
         # local label 24006
         p13 = re.compile(r'^local +label +(?P<local_label>[\d]+)$')
@@ -225,7 +234,8 @@ class ShowCefDetail(ShowCefDetailSchema):
         # Hash  OK  Interface                 Address
         # 0     Y   recursive                 10.55.0.2
         # 31    Y   recursive                 10.1.15.2
-        p18 = re.compile(r'^(?P<hash>[\d]+)\s+(?P<ok>[Y|N])\s+(?P<interface>[\w\/]+)\s+(?P<address>[\S]+)$')
+        # 0     Y   Bundle-Ether313           fe80::96ae:f0ff:fe72:6cda
+        p18 = re.compile(r'^(?P<hash>[\d]+)\s+(?P<ok>[Y|N])\s+(?P<interface>[\w\/-]+)\s+(?P<address>[\S]+)$')
 
         # Level 1 - Load distribution: 0 1 2 3
         # Level 1 - Load distribution: 0
@@ -234,6 +244,12 @@ class ShowCefDetail(ShowCefDetailSchema):
         # [0] via 10.20.240.49, recursive
         # [0] via fc00:c000:2003::/128, recursive
         p20 = re.compile(r'^\[(?P<load>\d+)\]\s+via\s+(?P<via_address>[a-zA-Z0-9.:\/]+),\s+(?P<via_flags>\w+)$')
+
+        # next hop VRF - 'default', table - 0xe0800000
+        p21 = re.compile(r"^next\s+hop\s+VRF\s+-\s+'(?P<next_hop_vrf>\w+)',\s+table\s+-\s+(?P<next_hop_table>\w+)$")
+
+        # SRv6 H.Encaps.L2.Red SID-list {fc00:c000:1001:e006::}
+        p22 = re.compile(r'^SRv6 +H.Encaps(?:.L2)?.Red +SID-list +{(?P<sid_list>[\w.:]+)}')
 
         result_dict = {}
 
@@ -260,7 +276,6 @@ class ShowCefDetail(ShowCefDetailSchema):
                     prefix_dict.update({
                         'drop': str(group['drop']),
                     })
-
                 continue
 
             # Updated Oct 13 18:18:19.680
@@ -371,14 +386,18 @@ class ShowCefDetail(ShowCefDetailSchema):
                 continue
 
             # path-idx 0 NHID 0x0 [0x78b4cbf8 0x0]
+            # path-idx 0 NHID 0x0 [0x8b001f38 0x0], Internal 0x89d70af0
             m = p11.match(line)
             if m:
                 group = m.groupdict()
                 path_dict = {
                     'path_idx': int(group['idx']),
-                    'nhid': group['nhid']
+                    'nhid': group['nhid'],
+                    'nhid_hex': group['nhid_hex']
                 }
                 via_dict.update({'path': path_dict})
+                if group['idx_internal']:
+                    via_dict['path']['idx_internal'] = group['idx_internal']
                 continue
 
             # next hop 10.55.0.2/32 via 10.55.0.2/32
@@ -427,8 +446,11 @@ class ShowCefDetail(ShowCefDetailSchema):
             # Load distribution: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 (refcount 3)
             m = p17.match(line)
             if m:
+                group = m.groupdict()
                 load_dict = lw_ldi_ts_dict.\
                     setdefault('load_distribution', {})
+                load_dict['distribution'] = group['distribution']
+                load_dict['refcount'] = int(group['refcount'])
                 continue
 
             m = p18.match(line)
@@ -471,6 +493,21 @@ class ShowCefDetail(ShowCefDetailSchema):
                 load_dict['via_address'] = group['via_address']
                 load_dict['via_flags'] = group['via_flags']
                 continue
+
+            # next hop VRF - 'default', table - 0xe0800000
+            m = p21.match(line)
+            if m:
+                group = m.groupdict()
+                via_dict['next_hop_vrf'] = group['next_hop_vrf']
+                via_dict['next_hop_table'] = group['next_hop_table']
+                continue
+
+            # SRv6 H.Encaps.L2.Red SID-list {fc00:c000:1001:e006::}
+            m = p22.match(line)
+            if m:
+                group = m.groupdict()
+                via_dict['sid_list'] = group['sid_list']
+                continue
         return result_dict
 
 
@@ -512,7 +549,7 @@ class ShowRouteIpv4Schema(MetaParser):
                                 Optional('next_hop'): {
                                     Optional('outgoing_interface'): {
                                         Any(): {
-                                            'outgoing_interface': str,
+                                            Optional('outgoing_interface'): str,
                                             Optional('updated'): str,
                                             Optional('metric'): int,
                                         }
@@ -529,6 +566,14 @@ class ShowRouteIpv4Schema(MetaParser):
                                             Optional('address_family'): str,
                                             Optional('table_id'): str,
                                             Optional('nexthop_in_vrf'): str,
+                                            Optional('label'): str,
+                                            Optional('tunnel_id'): str,
+                                            Optional('binding_label'): str,
+                                            Optional('extended_communites_count'): int,
+                                            Optional('nhid'): str,
+                                            Optional('path_grouping_id'): int,
+                                            Optional('srv6_headend'): str,
+                                            Optional('sid_list'): str
                                         }
                                     }
                                 }
@@ -699,7 +744,7 @@ class ShowRouteIpv4(ShowRouteIpv4Schema):
         # 2001:10::1, via GigabitEthernet0/0/0/0
         # 100.72.21.206, from 116.119.10.251, via Bundle-Ether104, Protected
         # 100.72.21.209, from 116.119.10.251, via Bundle-Ether105, Backup (Local-LFA)
-        p11 = re.compile(r'^(?P<nexthop>\S+)(,\s+from\s+(?P<from>\S+))?(, '
+        p11 = re.compile(r'^(?P<nexthop>[\w.:]+)(,\s+from\s+(?P<from>\S+))?(, '
                          r'+via\s+(?P<interface>\S+))?'
                          r'(, +(BGP external|Protected|Backup \(Local-LFA\)))?$')
         
@@ -722,6 +767,27 @@ class ShowRouteIpv4(ShowRouteIpv4Schema):
         p15 = re.compile(r'^Gateway +of +last +resort +is '
                          r'+(?P<gateway>(not +set)|\S+)( +to +network '
                          r'+(?P<to_network>\S+))?$')
+
+        # Label: None
+        p16 = re.compile(r'^Label:\s+(?P<label>\S+)$')
+
+        # Tunnel ID: None
+        p17 = re.compile(r'^Tunnel\s+ID:\s+(?P<tunnel_id>\S+)$')
+
+        # Binding Label: None
+        p18 = re.compile(r'^Binding\s+Label:\s+(?P<binding_label>\S+)$')
+
+        # Extended communities count: 0
+        p19 = re.compile(r'^Extended\s+communities\s+count:\s+(?P<extended_communites_count>\d+)$')
+
+        # NHID:0x0(Ref:0)
+        p20 = re.compile(r'^NHID:(?P<nhid>\S+)$')
+
+        # Path Grouping ID: 100
+        p21 = re.compile(r'^Path\s+Grouping\s+ID:\s+(?P<path_grouping_id>\d+)$')
+
+        # SRv6 Headend: H.Encaps.Red [f3216], SID-list {fc00:c000:1002:e002::}
+        p22 = re.compile(R'^SRv6\s+Headend:\s+(?P<srv6_headend>(.*)),\s+SID-list\s+{(?P<sid_list>[\w:]+)}$')
 
         # initial variables
         ret_dict = {}
@@ -1062,6 +1128,56 @@ class ShowRouteIpv4(ShowRouteIpv4Schema):
                 if group['to_network']:
                     gw_dict.update({'to_network': group['to_network']})
 
+            # Label: None
+            m = p16.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'label': group['label']})
+                continue
+
+            # Tunnel ID: None
+            m = p17.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'tunnel_id': group['tunnel_id']})
+                continue
+
+            # Binding Label: None
+            m = p18.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'binding_label': group['binding_label']})
+                continue
+
+            # Extended communities count: 0
+            m = p19.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'extended_communites_count': int(group['extended_communites_count'])})
+                continue
+
+            # NHID:0x0(Ref:0)
+            m = p20.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'nhid': group['nhid']})
+                continue
+
+            # Path Grouping ID: 100
+            m = p21.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'path_grouping_id': int(group['path_grouping_id'])})
+                continue
+
+            # SRv6 Headend: H.Encaps.Red [f3216], SID-list {fc00:c000:1002:e002::}
+            m = p22.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'srv6_headend': group['srv6_headend']})
+                outgoing_interface_dict.update({'sid_list': group['sid_list']})
+                continue
+
         return ret_dict
 
 
@@ -1214,8 +1330,9 @@ class ShowRouteIpv6(ShowRouteIpv4Schema):
         p11 = re.compile(r'^Installed +(?P<date>[\S\s]+) +for +(?P<for>\S+)$')
 
         # fe80::f816:3eff:fe76:b56d, from fe80::f816:3eff:fe76:b56d, via GigabitEthernet0/0/0/0.390
-        p12 = re.compile(r'^(?P<nexthop>\S+)(, from +(?P<from>\S+))?, '
-                         r'+via +(?P<interface>\S+)$')
+        # ::ffff:50.1.1.1, from ::ffff:50.1.1.8
+        p12 = re.compile(r'^(?P<nexthop>\S+)(, from +(?P<from>\S+))(?:, '
+                         r'+via +(?P<interface>\S+))?$')
 
         # R2_xrv#show route ipv6
         p13 = re.compile(r'^((\S+#)?(show +route))|(Routing +Descriptor +'
@@ -1227,6 +1344,27 @@ class ShowRouteIpv6(ShowRouteIpv4Schema):
         p14 = re.compile(r'^Gateway +of +last +resort +is '
                          r'+(?P<gateway>(not +set)|\S+)( +to +network '
                          r'+(?P<to_network>\S+))?$')
+
+        # Label: None
+        p15 = re.compile(r'^Label:\s+(?P<label>\S+)$')
+
+        # Tunnel ID: None
+        p16 = re.compile(r'^Tunnel\s+ID:\s+(?P<tunnel_id>\S+)$')
+
+        # Binding Label: None
+        p17 = re.compile(r'^Binding\s+Label:\s+(?P<binding_label>\S+)$')
+
+        # Extended communities count: 0
+        p18 = re.compile(r'^Extended\s+communities\s+count:\s+(?P<extended_communites_count>\d+)$')
+
+        # NHID:0x0(Ref:0)
+        p19 = re.compile(r'^NHID:(?P<nhid>\S+)$')
+
+        # Path Grouping ID: 100
+        p20 = re.compile(r'^Path\s+Grouping\s+ID:\s+(?P<path_grouping_id>\d+)$')
+
+        # SRv6 Headend: H.Encaps.Red [f3216], SID-list {fc00:c000:1002:e003::}
+        p21 = re.compile(R'^SRv6\s+Headend:\s+(?P<srv6_headend>(.*)),\s+SID-list\s+{(?P<sid_list>[\w:]+)}$')
 
         ret_dict = {}
         address_family = 'ipv6'
@@ -1455,19 +1593,21 @@ class ShowRouteIpv6(ShowRouteIpv4Schema):
                 continue
 
             # fe80::f816:3eff:fe76:b56d, from fe80::f816:3eff:fe76:b56d, via GigabitEthernet0/0/0/0.390
+            # ::ffff:50.1.1.1, from ::ffff:50.1.1.8
             m = p12.match(line)
             if m:
                 group = m.groupdict()
                 nexthop = group['nexthop']
                 _from = group['from']
-                interface = group['interface']
 
                 index += 1
                 outgoing_interface_dict = route_dict.setdefault('next_hop', {}). \
                     setdefault('next_hop_list', {}). \
                     setdefault(int(index), {})
                 outgoing_interface_dict.update({'index': index})
-                outgoing_interface_dict.update({'outgoing_interface': interface})
+                if group['interface']:
+                    interface = group['interface']
+                    outgoing_interface_dict.update({'outgoing_interface': interface})
                 if _from:
                     outgoing_interface_dict.update({'from': _from})
                 outgoing_interface_dict.update({'next_hop': nexthop})
@@ -1487,6 +1627,56 @@ class ShowRouteIpv6(ShowRouteIpv4Schema):
                 if group['to_network']:
                     gw_dict.update({'to_network' : group['to_network']})
 
+                continue
+
+            # Label: None
+            m = p15.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'label': group['label']})
+                continue
+
+            # Tunnel ID: None
+            m = p16.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'tunnel_id': group['tunnel_id']})
+                continue
+
+            # Binding Label: None
+            m = p17.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'binding_label': group['binding_label']})
+                continue
+
+            # Extended communities count: 0
+            m = p18.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'extended_communites_count': int(group['extended_communites_count'])})
+                continue
+
+            # NHID:0x0(Ref:0)
+            m = p19.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'nhid': group['nhid']})
+                continue
+
+            # Path Grouping ID: 100
+            m = p20.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'path_grouping_id': int(group['path_grouping_id'])})
+                continue
+
+            # SRv6 Headend: H.Encaps.Red [f3216], SID-list {fc00:c000:1002:e002::}
+            m = p21.match(line)
+            if m:
+                group = m.groupdict()
+                outgoing_interface_dict.update({'srv6_headend': group['srv6_headend']})
+                outgoing_interface_dict.update({'sid_list': group['sid_list']})
                 continue
 
         return ret_dict
@@ -1605,6 +1795,97 @@ class ShowRouteAllSummary(ShowRouteAllSummarySchema):
                     inst_dict.update({k:int(v) for k, v in group.items() if v is not None})
                 else:
                     group = {k: int(v) for k, v in group.items() if v is not None}
+                    protocol_dict.update(group)
+                continue
+
+        return ret_dict
+
+# ====================================================
+#  schema for show route summary
+# ====================================================
+class ShowRouteSummarySchema(MetaParser):
+    """Schema for :
+       show route summary"""
+
+    schema = {
+        'total_route_source': {
+            'routes': int,
+            'backup': int,
+            'deleted': int,
+            'memory_bytes': int,
+        },
+        'route_source': {
+            Any(): {
+                Any(): {
+                    'routes': int,
+                    'backup': int,
+                    'deleted': int,
+                    'memory_bytes': int,
+                },
+                Optional('routes'): int,
+                Optional('backup'): int,
+                Optional('deleted'): int,
+                Optional('memory_bytes'): int,
+            }
+        },
+    }
+
+
+# ====================================================
+#  parser for show route summary
+# ====================================================
+class ShowRouteSummary(ShowRouteSummarySchema):
+    """Parser for :
+       show route summary"""
+
+    cli_command = ['show route summary']
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command[0])
+        
+        # Route Source                     Routes     Backup     Deleted     Memory(bytes)
+        # connected                        3          2          0           1080         
+        # local                            5          0          0           1080         
+        # dagr                             0          0          0           0            
+        # te-client                        0          0          0           0            
+        # bgp 100                          6          0          0           1296         
+        # static                           0          0          0           0            
+        # application fib_mgr              0          0          0           0            
+        # Total                            14         2          0           3456 
+        
+        p1 = re.compile(
+            r'^(?P<protocol>[a-zA-Z0-9(\-|\_)]+) +(?P<instance>[a-zA-Z0-9\.(\-|\_)]+)* * +('
+            r'?P<routes>\d+) +(?P<backup>\d+) +(?P<deleted>\d+) +(?P<memory_bytes>\d+)')
+
+        ret_dict = {}
+
+        for line in output.splitlines():
+            line = line.strip()
+            
+            # Route Source                     Routes     Backup     Deleted     Memory(bytes)
+            # connected                        3          2          0           1080         
+            # local                            5          0          0           1080         
+            # dagr                             0          0          0           0            
+            # te-client                        0          0          0           0            
+            # bgp 100                          6          0          0           1296         
+            # static                           0          0          0           0            
+            # application fib_mgr              0          0          0           0            
+            # Total                            14         2          0           3456 
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                vrf_rs_dict = ret_dict.setdefault('route_source', {})
+                protocol = group.pop('protocol')
+                instance = group.pop('instance')
+                if protocol == 'Total':
+                    protocol_dict = ret_dict.setdefault('total_route_source', {})
+                else:
+                    protocol_dict = vrf_rs_dict.setdefault(protocol, {})
+                group = {k: int(v) for k, v in group.items() if v is not None}
+                if instance is not None:
+                    protocol_dict.setdefault(instance, {}).update(group)
+                else:                   
                     protocol_dict.update(group)
                 continue
 
