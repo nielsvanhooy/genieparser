@@ -8,6 +8,7 @@ IOSXE parsers for the following show commands:
     * 'show running-config aaa'
     * 'show running-config nve'
     * 'show running-config | section bgp'
+    * 'show running-config all | section class {class_map}'
 '''
 
 # Python
@@ -89,9 +90,9 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
         # police cir 100000 pir  70000 conform-action transmit  exceed-action drop
         # police cir 8000000 bc 4000 be 1000 conform-action transmit  exceed-action transmit  violate-action drop
         p1 = re.compile(r'^police +cir +(?P<cir_bps>(\d+))( +pir +(?P<pir_bps>(\d+)))?'
-            '( +bc +(?P<cir_bc_bytes>(\d+)))?( +be +(?P<cir_be_bytes>(\d+)))?'
-            ' +conform-action +(?P<conformed>(\w+)) +exceed-action +(?P<exceeded>(\w+))'
-            '( +violate-action +(?P<violated>(\w+)))?$')
+            r'( +bc +(?P<cir_bc_bytes>(\d+)))?( +be +(?P<cir_be_bytes>(\d+)))?'
+            r' +conform-action +(?P<conformed>(\w+)) +exceed-action +(?P<exceeded>(\w+))'
+            r'( +violate-action +(?P<violated>(\w+)))?$')
 
         # policy-map L3VPN-out_child
         # policy-map type queueing child
@@ -312,183 +313,189 @@ class ShowRunPolicyMap(ShowRunPolicyMapSchema):
 class ShowRunInterfaceSchema(MetaParser):
 
     schema = {
-        'interfaces': {
+        "interfaces": {
             Any(): {
-                Optional('authentication_control_direction'): str,
-                Optional('authentication_event_fail_action'): str,
-                Optional('authentication_fallback'): str,
-                Optional('authentication_host_mode'): str,
-                Optional('authentication_order'): str,
-                Optional('authentication_periodic'): bool,
-                Optional('authentication_port_control'): str,
-                Optional('authentication_priority'): str,
-                Optional('authentication_timer_inactivity'): str,
-                Optional('authentication_timer_reauthenticate_server'): bool,
-                Optional('authentication_timer_reauthenticate'): int,
-                Optional('authentication_violation'): str,
-                Optional('trust_device'): str,
-                Optional('carrier_delay'): list,
-                Optional('shutdown'): bool,
+                Optional("authentication_control_direction"): str,
+                Optional("authentication_event_fail_action"): str,
+                Optional("authentication_fallback"): str,
+                Optional("authentication_host_mode"): str,
+                Optional("authentication_order"): str,
+                Optional("authentication_periodic"): bool,
+                Optional("authentication_port_control"): str,
+                Optional("authentication_priority"): str,
+                Optional("authentication_timer_inactivity"): str,
+                Optional("authentication_timer_reauthenticate_server"): bool,
+                Optional("authentication_timer_reauthenticate"): int,
+                Optional("authentication_violation"): str,
+                Optional("trust_device"): str,
+                Optional("carrier_delay"): list,
+                Optional("shutdown"): bool,
                 Optional("encapsulation_ppp"): bool,
-                Optional('encapsulation_dot1q'): str,
-                Optional('description'): str,
-                Optional('dot1x_pae_authenticator'): bool,
-                Optional('dot1x_timeout_quiet_period'): str,
-                Optional('dot1x_timeout_server_timeout'): str,
-                Optional('dot1x_timeout_tx_period'): str,
-                Optional('dot1x_pae'): str,
-                Optional('dot1x_timeout_supp_timeout'): int,
-                Optional('dot1x_max_req'): int,
-                Optional('dot1x_authenticator_eap_profile'): str,
-                Optional('dot1x_timeout_held_period'): int,
-                Optional('dot1x_credentials'): str,
-                Optional('dot1x_supplicant_eap_profile'): str,
-                Optional('ip_arp_inspection_limit_rate'): str,
-                Optional('ip_dhcp_snooping_limit_rate'): str,
-                Optional('access_session_host_mode'): str,
-                Optional('access_session'): str,
-                Optional('access_session_port_control'): str,
-                Optional('ip_ospf'): {
+                Optional("encapsulation_dot1q"): str,
+                Optional("description"): str,
+                Optional("dot1x_pae_authenticator"): bool,
+                Optional("dot1x_timeout_quiet_period"): str,
+                Optional("dot1x_timeout_server_timeout"): str,
+                Optional("dot1x_timeout_tx_period"): str,
+                Optional("dot1x_pae"): str,
+                Optional("dot1x_timeout_supp_timeout"): int,
+                Optional("dot1x_max_req"): int,
+                Optional("dot1x_authenticator_eap_profile"): str,
+                Optional("dot1x_timeout_held_period"): int,
+                Optional("dot1x_credentials"): str,
+                Optional("dot1x_supplicant_eap_profile"): str,
+                Optional("ip_arp_inspection_limit_rate"): str,
+                Optional("ip_dhcp_snooping_limit_rate"): str,
+                Optional("access_session_host_mode"): str,
+                Optional("access_session"): str,
+                Optional("access_session_port_control"): str,
+                Optional("ip_ospf"): {
                     Any(): {
-                        'area': str,
+                        "area": str,
                     },
                 },
-                Optional('ipv4'): {
-                    'ip': str,
-                    'netmask': str,
+                Optional("ipv4"): {
+                    "ip": str,
+                    "netmask": str,
                 },
-                Optional('ipv4_secondaries'): {
+                Optional("ipv4_secondaries"): {
                     Any(): {
-                        'ip': str,
-                        'netmask': str,
-                        'primary': bool,
+                        "ip": str,
+                        "netmask": str,
+                        "primary": bool,
                     },
                 },
-                Optional('ipv6'): list,
-                Optional('ipv6_ospf'): {
+                Optional("ipv6"): list,
+                Optional("ipv6_ospf"): {
                     Any(): {
-                        'area': str,
+                        "area": str,
                     },
                 },
-                Optional('ipv6_enable'): bool,
-                Optional('ipv6_destination_guard_attach_policy'): str,
-                Optional('ipv6_source_guard_attach_policy'): str,
-                Optional('ipv6_nd_raguard_attach_policy'): str,
-                Optional('ipv6_ospfv3'): {
+                Optional("ipv6_enable"): bool,
+                Optional("ipv6_destination_guard_attach_policy"): str,
+                Optional("ipv6_source_guard_attach_policy"): str,
+                Optional("ipv6_nd_raguard_attach_policy"): str,
+                Optional("ipv6_ospfv3"): {
                     Any(): {
-                        'area': str,
+                        "area": str,
                     },
                 },
-                Optional('acl'): {
-                    Optional('inbound'): {
-                        'acl_name': str,
-                        'direction': str,
+                Optional("acl"): {
+                    Optional("inbound"): {
+                        "acl_name": str,
+                        "direction": str,
                     },
-                    Optional('outbound'): {
-                        'acl_name': str,
-                        'direction': str,
+                    Optional("outbound"): {
+                        "acl_name": str,
+                        "direction": str,
+                    },
+                },
+                Optional("load_interval"): str,
+                Optional("mab"): bool,
+                Optional("macsec_enabled"): bool,
+                Optional("macsec_access_control"): str,
+                Optional("mtu"): int,
+                Optional("mka_policy"): str,
+                Optional("mka_primary_keychain"): str,
+                Optional("mka_fallback_keychain"): str,
+                Optional("negotiation_auto"): bool,
+                Optional("cdp"): str,
+                Optional("snmp_trap_link_status"): bool,
+                Optional("snmp_trap_mac_notification_change_added"): bool,
+                Optional("snmp_trap_mac_notification_change_removed"): bool,
+                Optional("spanning_tree_bpduguard"): str,
+                Optional("spanning_tree_portfast"): bool,
+                Optional("spanning_tree_portfast_trunk"): bool,
+                Optional("spanning_tree_bpdufilter"): str,
+                Optional("switchport_access_vlan"): str,
+                Optional("switchport_trunk_vlans"): str,
+                Optional("keepalive"): bool,
+                Optional("switchport_mode"): str,
+                Optional("switchport_trunk_native_vlan"): int,
+                Optional("input_policy"): str,
+                Optional("output_policy"): str,
+                Optional("device_tracking_attach_policy"): str,
+                Optional("switchport_nonegotiate"): str,
+                Optional("vrf"): str,
+                Optional("src_ip"): str,
+                Optional("tunnel_mode"): str,
+                Optional("tunnel_dst"): str,
+                Optional("autoroute_announce"): str,
+                Optional("autoroute_destination"): str,
+                Optional("tunnel_priority"): list,
+                Optional("tunnel_bandwidth"): int,
+                Optional("tunnel_path_option"): {
+                    Any(): {
+                        Optional("path_type"): str,
+                        Optional("path_name"): str,
+                    },
+                },
+                Optional("mpls_ip"): str,
+                Optional("channel_group"): {
+                    "chg": int,
+                    "mode": str,
+                },
+                Optional("power_inline"): {
+                    Optional("state"): str,
+                    Optional("max_watts"): str,
+                },
+                Optional("power_inline_port_priority"): str,
+                Optional("flow_monitor_input"): str,
+                Optional("flow_monitor_output"): str,
+                Optional("flow_monitor_input_v6"): str,
+                Optional("flow_monitor_output_v6"): str,
+                Optional("flow_monitor_in_sampler"): str,
+                Optional("flow_monitor_out_sampler"): str,
+                Optional("input_sampler"): str,
+                Optional("output_sampler"): str,
+                Optional("pim_mode"): str,
+                Optional("policy_type"): str,
+                Optional("output_name"): str,
+                Optional("switchport_protected"): bool,
+                Optional("switchport_block_unicast"): bool,
+                Optional("switchport_block_multicast"): bool,
+                Optional("ip_dhcp_snooping_trust"): bool,
+                Optional("ip_arp_inspection_trust"): bool,
+                Optional("lisp_mobility"): str,
+                Optional("mac_address_sticky"): str,
+                Optional("source_template"): str,
+                Optional("host_reachability_protocol"): str,
+                Optional("source_interface"): str,
+                Optional("member_vni"): {
+                    Any(): {
+                        Optional("vrf"): str,
+                        Optional("ingress_replication"): {
+                            "enabled": bool,
+                            Optional("remote_peer_ip"): str,
+                        },
+                        Optional("mcast_group"): str,
+                        Optional("local_routing"): bool,
                     }
                 },
-                Optional('load_interval'): str,
-                Optional('mab'): bool,
-                Optional('macsec_enabled'): bool,
-                Optional('macsec_access_control'): str,
-                Optional('mtu'): int,
-                Optional('mka_policy'): str,
-                Optional('mka_primary_keychain'): str,
-                Optional('mka_fallback_keychain'): str,
-                Optional('negotiation_auto'): bool,
-                Optional('cdp'): str,
-                Optional('snmp_trap_link_status'): bool,
-                Optional('snmp_trap_mac_notification_change_added'): bool,
-                Optional('snmp_trap_mac_notification_change_removed'): bool,
-                Optional('spanning_tree_bpduguard'): str,
-                Optional('spanning_tree_portfast'): bool,
-                Optional('spanning_tree_portfast_trunk'): bool,
-                Optional('spanning_tree_bpdufilter'): str,
-                Optional('switchport_access_vlan'): str,
-                Optional('switchport_trunk_vlans'): str,
-                Optional('keepalive'): bool,
-                Optional('switchport_mode'): str,
-                Optional('switchport_trunk_native_vlan'): int,
-                Optional('input_policy'): str,
-                Optional('output_policy'): str,
-                Optional('device_tracking_attach_policy'): str,
-                Optional('switchport_nonegotiate'): str,
-                Optional('vrf'): str,
-                Optional('src_ip'): str,
-                Optional('tunnel_mode'): str,
-                Optional('tunnel_dst'):str,
-                Optional('autoroute_announce'):str,
-                Optional('autoroute_destination'):str,
-                Optional('tunnel_priority'):list,
-                Optional('tunnel_bandwidth'):int,
-                Optional('tunnel_path_option'):{
-                    Any():{
-                        Optional('path_type'):str,
-                        Optional('path_name'):str,
-                    },
-                },
-                Optional('mpls_ip'):str,
-                Optional('channel_group'): {
-                        'chg': int,
-                        'mode': str,
-                },
-                Optional('power_inline'): {
-                        Optional('state'): str,
-                        Optional('max_watts'): str,
-                },
-                Optional('power_inline_port_priority'): str,
-                Optional('flow_monitor_input'): str,
-                Optional('flow_monitor_output'): str,
-                Optional('flow_monitor_input_v6'): str,
-                Optional('flow_monitor_output_v6'): str,
-                Optional('flow_monitor_in_sampler'): str,
-                Optional('flow_monitor_out_sampler'): str,
-                Optional('input_sampler'): str,
-                Optional('output_sampler'): str,
-                Optional('pim_mode'): str,
-                Optional('policy_type'): str,
-                Optional('output_name'): str,
-                Optional('switchport_protected'): bool,
-                Optional('switchport_block_unicast'): bool,
-                Optional('switchport_block_multicast'): bool,
-                Optional('ip_dhcp_snooping_trust'): bool,
-                Optional('ip_arp_inspection_trust'): bool,
-                Optional('lisp_mobility'): str,
-                Optional('mac_address_sticky'):str,
-                Optional('source_template'):str,
-                Optional('host_reachability_protocol'): str,
-                Optional('source_interface'): str,
-                Optional('member_vni'): {
-                    Any():
-                         {Optional('vrf'): str,
-                          Optional('ingress_replication'): {
-                              'enabled': bool,
-                              Optional('remote_peer_ip'): str,
-                          },
-                          Optional('mcast_group'): str,
-                          Optional('local_routing'): bool
-                          }
-                     },
-                Optional('stackwise_virtual_link'): int,
-                Optional('dual_active_detection'): bool,
-                Optional('ip_dhcp_snooping_information_option_allow_untrusted'): bool,
-                Optional('duplex'): str,
-                Optional('speed'): int,
-                Optional('speed_nonegotiate'): bool,
-                Optional('isis'): {
-                    Optional('network'): str,
-                    Optional(Or('ipv4', 'ipv6')): {
-                        Optional('level'): {
-                            Optional(Or('level-1', 'level-2')): {
-                                Optional('metric'): int,
+                Optional("stackwise_virtual_link"): int,
+                Optional("dual_active_detection"): bool,
+                Optional("ip_dhcp_snooping_information_option_allow_untrusted"): bool,
+                Optional("duplex"): str,
+                Optional("speed"): int,
+                Optional("speed_nonegotiate"): bool,
+                Optional("isis"): {
+                    Optional("network"): str,
+                    Optional(Or("ipv4", "ipv6")): {
+                        Optional("level"): {
+                            Optional(Or("level-1", "level-2")): {
+                                Optional("metric"): int,
                             }
                         }
-                    }
+                    },
                 },
-                Optional('media_type'): str,
-                Optional('fhrps'): {
+                Optional("ip_verify_unicast_source_reachable_via"): str,
+                Optional("ip_verify_unicast_source_reachable_via_rx"): str,
+                Optional(
+                    "ip_verify_unicast_source_reachable_via_rx_allow_self_ping"
+                ): bool,
+                Optional("ip_verify_unicast_source_reachable_via_rx_acl"): str,
+                Optional("media_type"): str,
+                Optional("fhrps"): {
                     Any(): {
                         Optional("encryption_string"): str,
                         Optional("encryption_level"): str,
@@ -511,14 +518,14 @@ class ShowRunInterfaceSchema(MetaParser):
                 Optional("chap_password"): str,
                 Optional("chap_encryption"): int,
                 Optional("pap_username"): str,
-                Optional('pap_password'): str,
+                Optional("pap_password"): str,
                 Optional("pppoe_max_payload"): int,
                 Optional("ip_helpers"): list,
                 Optional("pvc_vp"): int,
                 Optional("pvc_vc"): int,
                 Optional("pvc_ubr"): str,
                 Optional("pvc_vbr_nrt"): str,
-                Optional('ip_negotiated'): bool,
+                Optional("ip_negotiated"): bool,
                 Optional("hold_queue_in"): int,
                 Optional("hold_queue_out"): int,
                 Optional("service_instances"): {
@@ -530,7 +537,7 @@ class ShowRunInterfaceSchema(MetaParser):
                         Optional("description"): str,
                         Optional("service_instance_trunked"): bool,
                     }
-                }
+                },
             }
         }
     }
@@ -1019,6 +1026,22 @@ class ShowRunInterface(ShowRunInterfaceSchema):
 
         # media-type rj45
         p139 = re.compile(r'^media-type\s+(?P<media_type>.*)$')
+
+        # ip verify unicast source reachable-via any
+        p140 = re.compile(
+            r"^ip verify unicast source reachable-via (?P<reachable_via>\S+)$"
+        )
+
+        # ip verify unicast source reachable-via rx
+        p141 = re.compile(r"^ip verify unicast source reachable-via rx$")
+
+        # ip verify unicast source reachable-via rx allow-self-ping
+        p142 = re.compile(
+            r"^ip verify unicast source reachable-via rx allow-self-ping$"
+        )
+
+        # ip verify unicast source reachable-via rx 102
+        p143 = re.compile(r"^ip verify unicast source reachable-via rx (?P<acl>\S+)$")
 
         # find the service_instance
         # service instance 11 ethernet
@@ -1952,6 +1975,38 @@ class ShowRunInterface(ShowRunInterfaceSchema):
                     'policy_type': group['policy_type'],
                     'output_name': group['output_name']
                 })
+                continue
+
+            # ip verify unicast source reachable-via any
+            m = p140.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update(
+                    {"ip_verify_unicast_source_reachable_via": group["reachable_via"]}
+                )
+                continue
+
+            # ip verify unicast source reachable-via rx
+            m = p141.match(line)
+            if m:
+                intf_dict.update({"ip_verify_unicast_source_reachable_via_rx": "rx"})
+                continue
+
+            # ip verify unicast source reachable-via rx allow-self-ping
+            m = p142.match(line)
+            if m:
+                intf_dict.update(
+                    {"ip_verify_unicast_source_reachable_via_rx_allow_self_ping": True}
+                )
+                continue
+
+            # ip verify unicast source reachable-via rx 102
+            m = p143.match(line)
+            if m:
+                group = m.groupdict()
+                intf_dict.update(
+                    {"ip_verify_unicast_source_reachable_via_rx_acl": group["acl"]}
+                )
                 continue
 
             # duplex full/duplex half
@@ -5309,5 +5364,187 @@ class ShowRunSectionMacAddress(ShowRunSectionMacAddressSchema):
                 ret_dict['mac_address'] = dict_val['mac_address']
                 ret_dict['type'] = dict_val['type']
                 ret_dict['port'] = dict_val['port']
+
+        return ret_dict
+
+# ==========================================================================
+# Schema for :
+#   * 'show running-config all | section class {class_map}'
+# ===========================================================================
+class ShowRunningConfigAllClassMapSchema(MetaParser):
+
+    ''' Schema for :
+        * 'show running-config all | section class {class_map}'
+    '''
+
+    schema = {
+        'class': {
+            Any(): {
+                Optional('police'): {
+                    Optional('rate_pps'): int,
+                    Optional('rate'): int,
+                    },
+                },
+            },
+        }
+
+# =====================================================================
+# Parser for:
+#   * 'show running-config all | section class {class_map}'
+# =====================================================================
+class ShowRunningConfigAllClassMap(ShowRunningConfigAllClassMapSchema):
+    ''' Parser for
+        * 'show running-config all | section class {class_map}'
+    '''
+
+    cli_command = 'show running-config all | section class {class_map}'
+
+    def cli(self, class_map='', output=None):
+
+        if output is None:
+            output = self.device.execute(self.cli_command.format(class_map=class_map))
+
+        ret_dict={}
+        police_dict={}
+        class_map_dict={}
+
+        # class system-cpp-default-v4
+        p1 = re.compile(r'^class +(?P<class_map>([\w\-\_]+))$')
+
+        # police rate 2000 pps
+        # police rate 10000000000
+        p2 = re.compile(r'^police +rate +(?P<rate>\d+)\s*((?P<rate_mode>pps))?$')
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # class system-cpp-default-v4
+            m = p1.match(line)
+            if m:
+                class_map = m.groupdict()['class_map']
+                class_map_dict = ret_dict.setdefault('class', {}).setdefault(class_map, {})
+                continue
+
+            # police rate 2000 pps
+            # police rate 10000000000
+            m = p2.match(line)
+            if m:
+                #police_line = 1
+                police_dict = class_map_dict.setdefault('police', {})
+                if m.groupdict()['rate_mode']:
+                    police_dict['rate_pps'] = int(m.groupdict()['rate'])
+                else:
+                    police_dict['rate'] = int(m.groupdict()['rate'])
+                continue
+        return ret_dict
+
+class ShowRunningConfigAAARadiusServerSchema(MetaParser):
+    """Schema for show running-config aaa radius-server"""
+    schema = {
+        'radius_server': {
+            Any(): {
+                'address_type': str,
+                'address': str,
+                'key': str,
+                'dtls_port': int,
+                'dtls_watchdoginterval': int,
+                'dtls_retries': int,
+                'dtls_trustpoint_client': str,
+                'dtls_trustpoint_server': str,
+            }
+        }
+    }
+
+class ShowRunningConfigAAARadiusServer(ShowRunningConfigAAARadiusServerSchema):
+    """Parser for show running-config aaa radius-server"""
+
+    cli_command = 'show running-config aaa radius-server'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        ret_dict = {}
+        radius_server_name = None
+
+        # Matching patterns
+        # radius server TMP_NAME
+        p1 = re.compile(r'^radius server (?P<name>\S+)$')
+
+        # address ipv4 16.0.0.104
+        p2 = re.compile(r'^address (?P<address_type>\S+) (?P<address>\S+)$')
+
+        # key radius/dtls
+        p3 = re.compile(r'^key (?P<key>\S+)$')
+
+        # dtls port 2083
+        p4 = re.compile(r'^dtls port (?P<dtls_port>\d+)$')
+
+        # dtls watchdoginterval 2
+        p5 = re.compile(r'^dtls watchdoginterval (?P<dtls_watchdoginterval>\d+)$')
+
+        # dtls retries 2
+        p6 = re.compile(r'^dtls retries (?P<dtls_retries>\d+)$')
+
+        # dtls trustpoint client Client
+        p7 = re.compile(r'^dtls trustpoint client (?P<dtls_trustpoint_client>\S+)$')
+
+        # dtls trustpoint server Server
+        p8 = re.compile(r'^dtls trustpoint server (?P<dtls_trustpoint_server>\S+)$')
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # radius server TMP_NAME
+            m = p1.match(line)
+            if m:
+                radius_server_name = m.groupdict()['name']
+                radius_server_dict = ret_dict.setdefault('radius_server', {}).setdefault(radius_server_name, {})
+                continue
+
+            # address ipv4 16.0.0.104
+            m = p2.match(line)
+            if m:
+                radius_server_dict.update({
+                    'address_type': m.groupdict()['address_type'],
+                    'address': m.groupdict()['address']
+                })
+                continue
+
+            # key radius/dtls
+            m = p3.match(line)
+            if m:
+                radius_server_dict.update({'key': m.groupdict()['key']})
+                continue
+
+            # dtls port 2083
+            m = p4.match(line)
+            if m:
+                radius_server_dict.update({'dtls_port': int(m.groupdict()['dtls_port'])})
+                continue
+
+            # dtls watchdoginterval 2
+            m = p5.match(line)
+            if m:
+                radius_server_dict.update({'dtls_watchdoginterval': int(m.groupdict()['dtls_watchdoginterval'])})
+                continue
+
+            # dtls retries 2
+            m = p6.match(line)
+            if m:
+                radius_server_dict.update({'dtls_retries': int(m.groupdict()['dtls_retries'])})
+                continue
+
+            # dtls trustpoint client Client
+            m = p7.match(line)
+            if m:
+                radius_server_dict.update({'dtls_trustpoint_client': m.groupdict()['dtls_trustpoint_client']})
+                continue
+
+            # dtls trustpoint server Server
+            m = p8.match(line)
+            if m:
+                radius_server_dict.update({'dtls_trustpoint_server': m.groupdict()['dtls_trustpoint_server']})
+                continue
 
         return ret_dict
