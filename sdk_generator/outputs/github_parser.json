@@ -110030,6 +110030,7 @@
     "model",
     "submodel",
     "pid",
+    "chassis_type",
     "version",
     "os_flavor",
     "revision"
