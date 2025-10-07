@@ -14,7 +14,7 @@ IOSXE parsers for the following show commands:
     * show ip nbar version
     * show ip nat translations
     * show ip nat translations total
-    * show ip nat translation udp total
+    * show ip nat translation {protocol} total
     * show ip nat translations vrf {vrf} total
     * show ip nat translations verbose
     * show ip nat statistics
@@ -96,6 +96,12 @@ IOSXE parsers for the following show commands:
     * show ip sla configuration {entry_number}
     * show ip subscriber mac {mac_address}
     * show ip virtual-assembly {interface}
+    * show ipv mld vrf {vrf} groups {group}
+    * show ip wccp web-cache detail
+    * show ip wccp web-cache clients
+    * show ip nat pool name {pool}
+    * show ip ospf database nssa
+    * show ip nat bpa
     '''
 
 # Python
@@ -7790,44 +7796,43 @@ class ShowIpNatTranslationsTotal(ShowIpNatTranslationsTotalSchema):
         return ret_dict
 
 # ===============================================
-# Schema for 'show ip nat translation udp total'
+# Schema for 'show ip nat translation {protocol} total'
 # ===============================================
 
 class ShowIpNatTranslationUdpTotalSchema(MetaParser):
-    """Schema for show ip nat translation udp total"""
+    """Schema for show ip nat translation {protocol} total"""
     schema = {
         'total_translations': int
     }
 
 class ShowIpNatTranslationUdpTotal(ShowIpNatTranslationUdpTotalSchema):
-    """Parser for show ip nat translation udp total"""
+    """Parser for show ip nat translations {protocol} total"""
 
-    cli_command = 'show ip nat translation udp total'
+    cli_command = 'show ip nat translations {protocol} total'
 
-    def cli(self, output=None):
+    def cli(self, protocol='', output=None):
         if output is None:
-            # Normally, you would use the device connection to execute the command
-            output = self.device.execute(self.cli_command)
+            # Execute the command on the device
+            output = self.device.execute(self.cli_command.format(protocol=protocol))
 
         # Initialize the parsed dictionary
         parsed_dict = {}
 
-        # Define the regex pattern to match the output line
         # Total number of translations: 2
-        pattern = re.compile(r'^Total number of translations: (?P<total>\d+)$')
+        p1 = re.compile(r'^Total +number +of +translations: +(?P<total>\d+)$')
 
-        # Iterate over each line in the output
         for line in output.splitlines():
             line = line.strip()
 
-            # Match the line against the pattern
-            # Total number of translations: 2
-            m = pattern.match(line)
+            #Total number of translations: 2
+            m = p1.match(line)
             if m:
                 # Use setdefault to avoid KeyError
                 parsed_dict.setdefault('total_translations', int(m.group('total')))
+                continue
 
         return parsed_dict
+
 # ==============================
 # Schema for 'show ip name-servers', 'show ip name-servers vrf {vrf}'
 # ==============================
@@ -9881,6 +9886,917 @@ class ShowIpVirtualReassemblyInterface(ShowIpVirtualReassemblyInterfaceSchema):
             m = p18.match(line)
             if m:
                 statistics_dict['total_packets_dropped_due_to_vfr'] = int(m.group('total_packets_dropped_due_to_vfr'))
+                continue
+
+        return parsed_dict
+
+
+
+# ====================================================
+# Schema for 'show ipv mld vrf {vrf} groups {group}'
+# ====================================================
+class ShowIpvMldVrfGroupsSchema(MetaParser):
+    """Schema for show ipv mld vrf {vrf} groups {group}"""
+
+    schema = {
+        'mld_connected_group_membership': ListOf({
+            'group_address': str,
+            'interface': str,
+            'uptime': str,
+            'expires': str,
+        })
+    }
+
+
+# ====================================================
+# Parser for 'show ipv mld vrf {vrf} groups {group}'
+# ====================================================
+class ShowIpvMldVrfGroups(ShowIpvMldVrfGroupsSchema):
+    """Parser for show ipv mld vrf {vrf} groups {group}"""
+
+    cli_command = 'show ipv mld vrf {vrf} groups {group}'
+
+    def cli(self, vrf="", group="", output=None):
+        if output is None:
+            cmd = self.cli_command.format(vrf=vrf, group=group)
+            output = self.device.execute(cmd)
+
+        # Initialize parsed dictionary
+        parsed_dict = {}
+
+        # Define regex patterns
+        # Group entry: "FF08:4000::1                            Gi0/2/3.2                                            00:00:00  00:04:19"
+        p_group_entry = re.compile(
+            r'^(?P<group_address>[0-9A-Fa-f:]+)\s+'
+            r'(?P<interface>\S+)\s+'
+            r'(?P<uptime>\d{2}:\d{2}:\d{2})\s+'
+            r'(?P<expires>\d{2}:\d{2}:\d{2})$'
+        )
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            if not line:
+                continue
+
+            # Skip header lines
+            if 'MLD Connected Group Membership' in line or 'Group Address' in line or 'Interface' in line:
+                continue
+
+            # Match group entry
+            # Example: "FF08:4000::1                            Gi0/2/3.2                                            00:00:00  00:04:19"
+            m = p_group_entry.match(line)
+            if m:
+                group_address = m.group('group_address')
+
+                mld_groups = parsed_dict.setdefault('mld_connected_group_membership', [])
+
+                group_dict = {
+                    'group_address': group_address,
+                    'interface': m.group('interface'),
+                    'uptime': m.group('uptime'),
+                    'expires': m.group('expires')
+                }
+
+                mld_groups.append(group_dict)
+                continue
+
+        return parsed_dict
+
+class ShowIpMrmStatusSchema(MetaParser):
+    """Schema for 'show ip mrm status'"""
+    schema = {
+        'status_report_cache': {
+            'timestamp': ListOf({
+                'date': str,
+                'manager': str,
+                'test_sender': str,
+                'test_receiver': str,
+                'pkt_loss_dup': str,
+                'ehsr': int,
+            })
+        }
+    }
+
+class ShowIpMrmStatus(ShowIpMrmStatusSchema):
+    """Parser for 'show ip mrm status'"""
+
+    cli_command = 'show ip mrm status'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        # Initialize the parsed dictionary
+        parsed_dict = {}
+
+        # Regular expression to match the p0 and p1
+        # "Jun 20 12:30:45"
+        p0 = re.compile(r'^(?P<date>\w+\s+\d+\s+\d+:\d+:\d+)$')
+        # manager: 10.1.1.2, test sender: 10.1.1.1, test receiver:10.1.1.3, packet loss/duplication:  (0%) , and EHSR (Error Handling Success Rate): 304.
+        p1 = re.compile(
+            r'^(?P<manager>\S+)\s+(?P<test_sender>\S+)\s+(?P<test_receiver>\S+)\s+'
+            r'(?P<pkt_loss_dup>\d+\s+\(\d+%\))\s+(?P<ehsr>\d+)$'
+        )
+
+        # Iterate over each line in the output
+        current_date = None
+        for line in output.splitlines():
+            line = line.strip()
+
+            # "jun 20 12:30:45"
+            m0 = p0.match(line)
+            if m0:
+                current_date = m0.group('date')
+                continue
+
+            # manager: 10.1.1.2, test sender: 10.1.1.1, test receiver:10.1.1.3, packet loss/duplication:  (0%) , and EHSR (Error Handling Success Rate): 304.
+            m1 = p1.match(line)
+            if m1 and current_date:
+                # Extract data using named groups
+                manager = m1.group('manager')
+                test_sender = m1.group('test_sender')
+                test_receiver = m1.group('test_receiver')
+                pkt_loss_dup = m1.group('pkt_loss_dup')
+                ehsr = int(m1.group('ehsr'))
+
+                # Use setdefault to avoid KeyError
+                timestamp_list = parsed_dict.setdefault('status_report_cache', {}).setdefault('timestamp', [])
+
+                # Append the extracted data to the list
+                timestamp_list.append({
+                    'date': current_date,
+                    'manager': manager,
+                    'test_sender': test_sender,
+                    'test_receiver': test_receiver,
+                    'pkt_loss_dup': pkt_loss_dup,
+                    'ehsr': ehsr,
+                })
+
+        return parsed_dict
+
+class ShowIpPimInterfaceCountSchema(MetaParser):
+    """Schema for 'show ip pim interface count'"""
+    schema = {
+        'interfaces': {
+            str: {  # Interface name
+                'address': str,
+                'fs': str,
+                'mpackets_in': int,
+                'mpackets_out': int,
+            }
+        }
+    }
+
+
+class ShowIpPimInterfaceCount(ShowIpPimInterfaceCountSchema):
+    """Parser for 'show ip pim interface count'"""
+
+    cli_command = 'show ip pim interface count'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        # Initialize the parsed dictionary
+        parsed_dict = {}
+
+        # address: 10.1.1.3, interface: GigabitEthernet0/1,fs: *, mpackets In/out: 0/0
+        p1 = re.compile(r'^(?P<address>\d+\.\d+\.\d+\.\d+)\s+'
+                        r'(?P<interface>\S+)\s+'
+                        r'(?P<fs>\S+)\s+'
+                        r'(?P<mpackets_in>\d+)/(?P<mpackets_out>\d+)$')
+
+        for line in output.splitlines():
+            line = line.strip()
+            
+            # address: 10.1.1.3, interface: GigabitEthernet0/1, fs: *, mpackets In/out: 0/0
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                interface = group['interface']
+                # Use setdefault to avoid KeyError
+                interface_dict = parsed_dict.setdefault('interfaces', {}).setdefault(interface, {})
+                interface_dict['address'] = group['address']
+                interface_dict['fs'] = group['fs']
+                interface_dict['mpackets_in'] = int(group['mpackets_in'])
+                interface_dict['mpackets_out'] = int(group['mpackets_out'])
+
+        return parsed_dict
+
+
+# ================================================================================
+# Schema for 'show ip wccp web-cache detail'
+# ================================================================================
+class ShowIpWccpWebCacheDetailSchema(MetaParser):
+    """Schema for show ip wccp web-cache detail"""
+
+    schema = {
+        'wccp_client_information': {
+            Any(): {  # WCCP Client ID (IP address)
+                'client_id': str,
+                'protocol_version': str,
+                'state': str,
+                'redirection': str,
+                'packet_return': str,
+                'assignment': str,
+                'connect_time': str,
+                'redirected_packets': {
+                    'process': int,
+                    'cef': int,
+                },
+                'gre_bypassed_packets': {
+                    'process': int,
+                    'cef': int,
+                },
+                'hash_allotment': str,
+                'hash_allotment_percentage': float,
+                'initial_hash_info': str,
+                'assigned_hash_info': str,
+            }
+        }
+    }
+
+# ================================================================================
+# Parser for 'show ip wccp web-cache detail'
+# ================================================================================
+class ShowIpWccpWebCacheDetail(ShowIpWccpWebCacheDetailSchema):
+    """Parser for show ip wccp web-cache detail"""
+
+    cli_command = ['show ip wccp web-cache detail']
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command[0])
+
+        # Initialize result dictionary
+        parsed_dict = {}
+
+        # Regular expressions for parsing
+        # WCCP Client ID:          209.165.200.225
+        p1 = re.compile(r'^\s*WCCP Client ID:\s+(?P<client_id>\S+)$')
+        # Protocol Version:        2.0
+        p2 = re.compile(r'^\s*Protocol Version:\s+(?P<protocol_version>\S+)$')
+        # State:                   Usable
+        p3 = re.compile(r'^\s*State:\s+(?P<state>\S+)$')
+        # Redirection:             GRE
+        p4 = re.compile(r'^\s*Redirection:\s+(?P<redirection>\S+)$')
+        # Packet Return:           GRE
+        p5 = re.compile(r'^\s*Packet Return:\s+(?P<packet_return>\S+)$')
+        # Assignment:              HASH
+        p6 = re.compile(r'^\s*Assignment:\s+(?P<assignment>\S+)$')
+        # Connect Time:            1w5d
+        p7 = re.compile(r'^\s*Connect Time:\s+(?P<connect_time>\S+)$')
+        # Process:               0
+        p8 = re.compile(r'^\s*Process:\s+(?P<process>\d+)$')
+        # CEF:                   0
+        p9 = re.compile(r'^\s*CEF:\s+(?P<cef>\d+)$')
+        # Hash Allotment:          128 of 256 (50.00%)
+        p10 = re.compile(r'^\s*Hash Allotment:\s+(?P<hash_allotment>\d+ of \d+) \((?P<percentage>[\d.]+)%\)$')
+        # Initial Hash Info:       00000000000000000000000000000000
+        p11 = re.compile(r'^\s*Initial Hash Info:\s+(?P<initial_hash>.+)$')
+        # Assigned Hash Info:      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        p12 = re.compile(r'^\s*Assigned Hash Info:\s+(?P<assigned_hash>.+)$')
+        # Continuation lines for hash info (starting with spaces)
+        p13 = re.compile(r'^\s+(?P<hash_continuation>[A-F0-9]+)$')
+
+        current_client = None
+        current_section = None
+        hash_continuation_type = None
+
+        for line in output.splitlines():
+            if not line.strip():
+                continue
+
+            # WCCP Client ID:          209.165.200.225
+            m = p1.match(line)
+            if m:
+                client_id = m.group('client_id')
+
+                parsed_dict.setdefault('wccp_client_information', {})[client_id] = {
+                    'client_id': client_id
+                }
+                current_client = parsed_dict['wccp_client_information'][client_id]
+                current_section = None
+                hash_continuation_type = None
+                continue
+
+            if current_client is None:
+                continue
+
+            # Protocol Version:        2.0
+            m = p2.match(line)
+            if m:
+                current_client['protocol_version'] = m.group('protocol_version')
+                continue
+
+            # State:                   Usable
+            m = p3.match(line)
+            if m:
+                current_client['state'] = m.group('state')
+                continue
+
+            # Redirection:             GRE
+            m = p4.match(line)
+            if m:
+                current_client['redirection'] = m.group('redirection')
+                continue
+
+            # Packet Return:           GRE
+            m = p5.match(line)
+            if m:
+                current_client['packet_return'] = m.group('packet_return')
+                continue
+
+            # Assignment:              HASH
+            m = p6.match(line)
+            if m:
+                current_client['assignment'] = m.group('assignment')
+                continue
+
+            # Connect Time:            1w5d
+            m = p7.match(line)
+            if m:
+                current_client['connect_time'] = m.group('connect_time')
+                continue
+
+            # Redirected Packets:
+            if 'Redirected Packets:' in line:
+                current_section = 'redirected_packets'
+                current_client.setdefault('redirected_packets', {})
+                continue
+
+            # GRE Bypassed Packets:
+            if 'GRE Bypassed Packets:' in line:
+                current_section = 'gre_bypassed_packets'
+                current_client.setdefault('gre_bypassed_packets', {})
+                continue
+
+            # Process:               0
+            m = p8.match(line)
+            if m and current_section:
+                current_client[current_section]['process'] = int(m.group('process'))
+                continue
+
+            # CEF:                   0
+            m = p9.match(line)
+            if m and current_section:
+                current_client[current_section]['cef'] = int(m.group('cef'))
+                current_section = None  # Reset after CEF (last item in section)
+                continue
+
+            # Hash Allotment:          128 of 256 (50.00%)
+            m = p10.match(line)
+            if m:
+                current_client['hash_allotment'] = m.group('hash_allotment')
+                current_client['hash_allotment_percentage'] = float(m.group('percentage'))
+                continue
+
+            # Initial Hash Info:       00000000000000000000000000000000
+            m = p11.match(line)
+            if m:
+                current_client['initial_hash_info'] = m.group('initial_hash')
+                hash_continuation_type = 'initial'
+                continue
+
+            # Assigned Hash Info:      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+            m = p12.match(line)
+            if m:
+                current_client['assigned_hash_info'] = m.group('assigned_hash')
+                hash_continuation_type = 'assigned'
+                continue
+
+            # Hash continuation lines
+            m = p13.match(line)
+            if m and hash_continuation_type:
+                hash_value = m.group('hash_continuation')
+                if hash_continuation_type == 'initial':
+                    current_client['initial_hash_info'] += hash_value
+                elif hash_continuation_type == 'assigned':
+                    current_client['assigned_hash_info'] += hash_value
+                continue
+
+        return parsed_dict
+
+# ====================================================
+# Schema for 'show ip wccp web-cache clients'
+# ====================================================
+
+class ShowIpWccpWebCacheClientsSchema(MetaParser):
+    """Schema for show ip wccp web-cache clients"""
+
+    schema = {
+        'wccp_client_information': {
+            Any(): {  # Client ID
+                'client_id': str,
+                'protocol_version': str,
+                'state': str,
+                'redirection': str,
+                'packet_return': str,
+                'assignment': str,
+                'packets_redirected': int,
+                'connect_time': str,
+            }
+        }
+    }
+
+
+# ====================================================
+# Parser for 'show ip wccp web-cache clients'
+# ====================================================
+
+class ShowIpWccpWebCacheClients(ShowIpWccpWebCacheClientsSchema):
+    """Parser for show ip wccp web-cache clients"""
+
+    cli_command = 'show ip wccp web-cache clients'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        # Initialize result dictionary
+        parsed_dict = {}
+
+        # Regular expressions for parsing
+        # WCCP Client information:
+        p1 = re.compile(r'^\s*WCCP Client information:\s*$')
+        # WCCP Client ID:          10.1.100.10
+        p2 = re.compile(r'^\s*WCCP Client ID:\s+(?P<client_id>\S+)$')
+        # Protocol Version:        2.0
+        p3 = re.compile(r'^\s*Protocol Version:\s+(?P<protocol_version>\S+)$')
+        # State:                   Usable
+        p4 = re.compile(r'^\s*State:\s+(?P<state>\S+)$')
+        # Redirection:             GRE
+        p5 = re.compile(r'^\s*Redirection:\s+(?P<redirection>\S+)$')
+        # Packet Return:           GRE
+        p6 = re.compile(r'^\s*Packet Return:\s+(?P<packet_return>\S+)$')
+        # Assignment:              HASH
+        p7 = re.compile(r'^\s*Assignment:\s+(?P<assignment>\S+)$')
+        # Packets Redirected:      1234567
+        p8 = re.compile(r'^\s*Packets Redirected:\s+(?P<packets_redirected>\d+)$')
+        # Connect Time:            01:12:45
+        p9 = re.compile(r'^\s*Connect Time:\s+(?P<connect_time>\S+)$')
+
+        current_client = None
+
+        for line in output.splitlines():
+            # Skip empty lines
+            if not line.strip():
+                continue
+
+            # WCCP Client information:
+            m = p1.match(line)
+            if m:
+                # Reset current client for new client block
+                current_client = None
+                continue
+
+            # WCCP Client ID:          10.1.100.10
+            m = p2.match(line)
+            if m:
+                client_id = m.group('client_id')
+                parsed_dict.setdefault('wccp_client_information', {})
+                parsed_dict['wccp_client_information'][client_id] = {
+                    'client_id': client_id
+                }
+                current_client = parsed_dict['wccp_client_information'][client_id]
+                continue
+
+            if current_client is None:
+                continue
+
+            # Protocol Version:        2.0
+            m = p3.match(line)
+            if m:
+                current_client['protocol_version'] = m.group('protocol_version')
+                continue
+
+            # State:                   Usable
+            m = p4.match(line)
+            if m:
+                current_client['state'] = m.group('state')
+                continue
+
+            # Redirection:             GRE
+            m = p5.match(line)
+            if m:
+                current_client['redirection'] = m.group('redirection')
+                continue
+
+            # Packet Return:           GRE
+            m = p6.match(line)
+            if m:
+                current_client['packet_return'] = m.group('packet_return')
+                continue
+
+            # Assignment:              HASH
+            m = p7.match(line)
+            if m:
+                current_client['assignment'] = m.group('assignment')
+                continue
+
+            # Packets Redirected:      1234567
+            m = p8.match(line)
+            if m:
+                current_client['packets_redirected'] = int(m.group('packets_redirected'))
+                continue
+
+            # Connect Time:            01:12:45
+            m = p9.match(line)
+            if m:
+                current_client['connect_time'] = m.group('connect_time')
+                continue
+
+        return parsed_dict
+
+# ===========================================
+# Schema for 'show ip nat pool name {pool_name}'
+# ===========================================
+class ShowIpNatPoolNameSchema(MetaParser):
+    """Schema for show ip nat pool name {pool_name}"""
+    schema = {
+        'pool_name': {
+            Any(): {
+                'id': int,
+                'addresses': {
+                    'assigned': str,
+                    'available': str,
+                },
+                'udp_low_ports': {
+                    'assigned': str,
+                    'available': str,
+                },
+                'tcp_low_ports': {
+                    'assigned': str,
+                    'available': str,
+                },
+                'udp_high_ports': {
+                    'assigned': str,
+                    'available': str,
+                },
+                'tcp_high_ports': {
+                    'assigned': str,
+                    'available': str,
+                },
+            }
+        }
+    }
+
+# ===========================================
+# Parser for 'show ip nat pool name {pool_name}'
+# ===========================================
+class ShowIpNatPoolName(ShowIpNatPoolNameSchema):
+    """Parser for show ip nat pool name {pool_name}"""
+
+    cli_command = 'show ip nat pool name {pool_name}'
+
+    def cli(self, pool_name, output=None):
+        if output is None:
+            cmd = self.cli_command.format(pool_name=pool_name)
+            output = self.device.execute(cmd)
+
+        # Initialize the parsed dictionary
+        parsed_dict = {}
+
+        # Regular expressions for parsing the output
+        #Pool name natpool1, id 1
+        p1 = re.compile(r'^Pool +name +(?P<pool_name>\S+), +id +(?P<id>\d+)$')
+
+        #Addresses                          0                  254
+        p2 = re.compile(r'^Addresses +(?P<assigned>\d+) +(?P<available>\d+)$')
+
+        #  UDP Low Ports                      0               130048
+        p3 = re.compile(r'^UDP +Low +Ports +(?P<assigned>\d+) +(?P<available>\d+)$')
+
+        #  TCP Low Ports                      0               130048
+        p4 = re.compile(r'^TCP +Low +Ports +(?P<assigned>\d+) +(?P<available>\d+)$')
+
+        #  UDP High Ports                     0             1638604
+        p5 = re.compile(r'^UDP +High +Ports +(?P<assigned>\d+) +(?P<available>\d+)$')
+
+        #  TCP High Ports                     0             16386048
+        p6 = re.compile(r'^TCP +High +Ports +(?P<assigned>\d+) +(?P<available>\d+)$')
+
+        # Variables to hold the current pool name
+        current_pool_name = None
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # Match pool name and id
+            #Pool name natpool1, id 1
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                current_pool_name = group['pool_name']
+                pool_id = int(group['id'])
+                pool_dict = parsed_dict.setdefault('pool_name', {}).setdefault(current_pool_name, {})
+                pool_dict['id'] = pool_id
+                continue
+
+            # Match addresses
+            #Addresses                          0                  254
+            m = p2.match(line)
+            if m and current_pool_name:
+                group = m.groupdict()
+                pool_dict['addresses'] = {
+                    'assigned': group['assigned'],
+                    'available': group['available'],
+                }
+                continue
+
+            # Match UDP low ports
+            #  UDP Low Ports                      0               130048 
+            m = p3.match(line)
+            if m and current_pool_name:
+                group = m.groupdict()
+                pool_dict['udp_low_ports'] = {
+                    'assigned': group['assigned'],
+                    'available': group['available'],
+                }
+                continue
+
+            # Match TCP low ports
+            #  TCP Low Ports                      0               130048
+            m = p4.match(line)
+            if m and current_pool_name:
+                group = m.groupdict()
+                pool_dict['tcp_low_ports'] = {
+                    'assigned': group['assigned'],
+                    'available': group['available'],
+                }
+                continue
+
+            # Match UDP high ports
+            #  UDP High Ports                     0             16386048
+            m = p5.match(line)
+            if m and current_pool_name:
+                group = m.groupdict()
+                pool_dict['udp_high_ports'] = {
+                    'assigned': group['assigned'],
+                    'available': group['available'],
+                }
+                continue
+
+            # Match TCP high ports
+            # TCP High Ports                     0             16386048
+            m = p6.match(line)
+            if m and current_pool_name:
+                group = m.groupdict()
+                pool_dict['tcp_high_ports'] = {
+                    'assigned': group['assigned'],
+                    'available': group['available'],
+                }
+                continue
+
+        return parsed_dict
+
+class ShowIpOspfDatabaseNssaSchema(MetaParser):
+    '''Schema for show ip ospf database nssa'''
+    schema = {
+        'ospf_router': {
+            'router_id': str,
+            'process_id': int,
+            'type_7_as_external_link_states': {
+                'area': int,
+                'link_states': {
+                    Any(): {
+                        'ls_age': int,
+                        'options': str,
+                        'ls_type': str,
+                        'link_state_id': str,
+                        'advertising_router': str,
+                        'ls_seq_number': str,
+                        'checksum': int,
+                        'length': int,
+                        'network_mask': int,
+                        'metric_type': int,
+                        'mtid': int,
+                        'metric': int,
+                        'forward_address': str,
+                        'external_route_tag': int,
+                    }
+                }
+            }
+        }
+    }
+
+class ShowIpOspfDatabaseNssa(ShowIpOspfDatabaseNssaSchema):
+    '''Parser for show ip ospf database nssa'''
+    cli_command = 'show ip ospf database nssa'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        parsed = {}
+        # OSPF Router with ID (10.0.0.1) (Process ID 1)
+        p1 = re.compile(r'^OSPF Router with ID \((?P<router_id>[\d\.]+)\) \(Process ID (?P<process_id>\d+)\)$')
+        # Type-7 AS External Link States (Area 40)
+        p2 = re.compile(r'^\s*Type-7 AS External Link States \(Area (?P<area>\d+)\)$')
+        # LS age: 117
+        p3 = re.compile(r'^\s*LS age: (?P<ls_age>\d+)$')
+        # Options: (No TOS-capability, Type 7/5 translation, DC)
+        p4 = re.compile(r'^\s*Options: (?P<options>.*)$')
+        # LS Type: AS External Link
+        p5 = re.compile(r'^\s*LS Type: (?P<ls_type>.*)$')
+        # Link State ID: 223.255.0.0 (External Network Number )
+        p6 = re.compile(r'^\s*Link State ID: (?P<link_state_id>[\d\.]+) \(External Network Number \)$')
+        # Advertising Router: 1.1.1.1
+        p7 = re.compile(r'^\s*Advertising Router: (?P<advertising_router>[\d\.]+)$')
+        # LS Seq Number: 80000001
+        p8 = re.compile(r'^\s*LS Seq Number: (?P<ls_seq_number>\w+)$')
+        # Checksum: 0x66B7
+        p9 = re.compile(r'^\s*Checksum: (?P<checksum>0x\w+)$')
+        # Length: 36
+        p10 = re.compile(r'^\s*Length: (?P<length>\d+)$')
+        #  Network Mask: /16
+        p11 = re.compile(r'^\s*Network Mask: (?P<network_mask>/\d+)$')
+        # Metric Type: 1 (Comparable directly to link state metric)
+        p12 = re.compile(r'^\s*Metric Type: (?P<metric_type>\d+) \((?P<metric_type_desc>.*)\)$')
+        # MTID: 0
+        p13 = re.compile(r'^\s*MTID: (?P<mtid>\d+)$')
+        # Metric: 10
+        p14 = re.compile(r'^\s*Metric: (?P<metric>\d+)$')
+        # Forward Address: 10.10.10.1
+        p15 = re.compile(r'^\s*Forward Address: (?P<forward_address>[\d\.]+)$')
+        # External Route Tag: 0
+        p16 = re.compile(r'^\s*External Route Tag: (?P<external_route_tag>\d+)$')
+
+        for line in output.splitlines():
+            line = line.strip()
+            # OSPF Router with ID (1.1.1.1) (Process ID 1)
+            m = p1.match(line)
+            if m:
+                group = m.groupdict()
+                ospf_router_dict = parsed.setdefault('ospf_router', {})
+                ospf_router_dict['router_id'] = group['router_id']
+                ospf_router_dict['process_id'] = int(group['process_id'])
+                continue
+            # Type-7 AS External Link States (Area 40)
+            m = p2.match(line)
+            if m:
+                group = m.groupdict()
+                link_states_dict = ospf_router_dict.setdefault('type_7_as_external_link_states', {})
+                link_states_dict['area'] = int(group['area'])
+                link_states_dict['link_states'] = {}
+                continue
+            # LS age: 117
+            m = p3.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict = link_states_dict['link_states'].setdefault(len(link_states_dict['link_states']), {})
+                link_state_dict['ls_age'] = int(group['ls_age'])
+                continue
+            # Options: (No TOS-capability, Type 7/5 translation, DC)
+            m = p4.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['options'] = group['options']
+                continue
+            # LS Type: AS External Link
+            m = p5.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['ls_type'] = group['ls_type']
+                continue
+            # Link State ID: 223.255.0.0 (External Network Number )
+            m = p6.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['link_state_id'] = group['link_state_id']
+                continue
+            # Advertising Router: 1.1.1.1
+            m = p7.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['advertising_router'] = group['advertising_router']
+                continue
+            # LS Seq Number: 80000001
+            m = p8.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['ls_seq_number'] = group['ls_seq_number']
+                continue
+            # Checksum: 0x66B7
+            m = p9.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['checksum'] = int(group['checksum'], 16)
+                continue
+            # Length: 36
+            m = p10.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['length'] = int(group['length'])
+                continue
+            # Network Mask: /16
+            m = p11.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['network_mask'] = int(group['network_mask'].lstrip('/'))
+                continue
+            # Metric Type: 1 (Comparable directly to link state metric)
+            m = p12.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['metric_type'] = int(group['metric_type'])
+                continue
+            # MTID: 0
+            m = p13.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['mtid'] = int(group['mtid'])
+                continue
+            # Metric: 10
+            m = p14.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['metric'] = int(group['metric'])
+                continue
+            # Forward Address: 10.10.10.1
+            m = p15.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['forward_address'] = group['forward_address']
+                continue
+            # External Route Tag: 0
+            m = p16.match(line)
+            if m:
+                group = m.groupdict()
+                link_state_dict['external_route_tag'] = int(group['external_route_tag'])
+                continue
+
+        return parsed
+
+class ShowIpNatBpaSchema(MetaParser):
+    """Schema for show ip nat bpa"""
+    schema = {
+        'paired_address_pooling': {
+            'limit': int,
+        },
+        'bulk_port_allocation': {
+            'port_set_size': int,
+            'port_step_size': int,
+            'single_set': bool,
+        }
+    }
+
+class ShowIpNatBpa(ShowIpNatBpaSchema):
+    """Parser for show ip nat bpa"""
+
+    cli_command = 'show ip nat bpa'
+
+    def cli(self, output=None):
+        if output is None:
+            output = self.device.execute(self.cli_command)
+
+        # Initialize the parsed dictionary
+        parsed_dict = {}
+
+        # Regular expressions for parsing the output
+		
+        # Limit:            1000 local addresses per global address
+        p1 = re.compile(r'^Limit:\s+(?P<limit>\d+) local addresses per global address$')
+		
+	# Port set size:    64 ports in each port set allocation
+        p2 = re.compile(r'^Port set size:\s+(?P<port_set_size>\d+) ports in each port set allocation$')
+		
+	# Port step size:   16
+        p3 = re.compile(r'^Port step size:\s+(?P<port_step_size>\d+)$')
+		
+	# Single set:       True
+        p4 = re.compile(r'^Single set:\s+(?P<single_set>\w+)$')
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # Limit:            1000 local addresses per global address
+            m = p1.match(line)
+            if m:
+                paired_address_pooling = parsed_dict.setdefault('paired_address_pooling', {})
+                paired_address_pooling['limit'] = int(m.group('limit'))
+                continue
+
+            # Port set size:    64 ports in each port set allocation
+            m = p2.match(line)
+            if m:
+                bulk_port_allocation = parsed_dict.setdefault('bulk_port_allocation', {})
+                bulk_port_allocation['port_set_size'] = int(m.group('port_set_size'))
+                continue
+
+            # Port step size:   16
+            m = p3.match(line)
+            if m:
+                bulk_port_allocation = parsed_dict.setdefault('bulk_port_allocation', {})
+                bulk_port_allocation['port_step_size'] = int(m.group('port_step_size'))
+                continue
+
+            # Single set:       True
+            m = p4.match(line)
+            if m:
+                bulk_port_allocation = parsed_dict.setdefault('bulk_port_allocation', {})
+                bulk_port_allocation['single_set'] = m.group('single_set').lower() == 'true'
                 continue
 
         return parsed_dict

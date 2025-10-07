@@ -12,16 +12,22 @@ IOSXE c9610 parsers for the following show commands:
     * show platform hardware fed switch {switch_var} qos queue config interface {interface}
     * show platform hardware authentication status
     * show platform software fed {switch} {mode} ipv6 route summary | include {match}'
+    * show platform hardware fed {switch} {mode} qos queue stats internal port_type {port_type} port_num {port_num} asic {asic}
+    * show platform hardware chassis fantray detail all
 '''
 from genie.metaparser import MetaParser
 from genie.libs.parser.utils.common import Common
 import re
-from genie.metaparser.util.schemaengine import Schema, Any, Or, Optional, Use, And
+from genie.metaparser.util.schemaengine import Schema, Any, Or, Optional, Use, And, ListOf
 from genie.libs.parser.iosxe.cat9k.c9600.show_platform import ShowPlatformFedActiveTcamUtilization as ShowPlatformFedActiveTcamUtilization_c9600
-
+from genie.libs.parser.iosxe.cat9k.c9600.show_platform import ShowPlatformFedStandbyTcamUtilization as ShowPlatformFedStandbyTcamUtilization_c9600
 
 class ShowPlatformFedActiveTcamUtilization(ShowPlatformFedActiveTcamUtilization_c9600):
     """ Parser for show platform hardware fed active fwd-asic resource tcam utilization"""
+    pass
+
+class ShowPlatformFedStandbyTcamUtilization(ShowPlatformFedStandbyTcamUtilization_c9600):
+    """ Parser for show platform hardware fed standby fwd-asic resource tcam utilization"""
     pass
 
 
@@ -1477,6 +1483,457 @@ class ShowPlatformHardwareAuthenticationStatus(
             if m:
                 group = m.groupdict()
                 ret_dict[group['hardware']] = group['Slot']
+                continue
+
+        return ret_dict
+
+class ShowPlatformSoftwareFedIpRouteSummarySchema(MetaParser):
+    schema = {
+        'v4_fib_summary': {
+            'sw_entries': int,
+            'devices': ListOf({
+                'device_id': int,
+                'lpm_hw_entries': int,
+                'em_hw_entries': int
+            })
+        },
+        Optional('successful_platform_updates'): {
+            Any(): int
+        },
+        Optional('failed_platform_updates'): {
+            Any(): int
+        },
+        Optional('misc_adj_stats'): {
+            Any(): int
+        },
+        Optional('l3_control_generic_count'): int,
+        Optional('ecr_summary'): {
+            Optional('successful_platform_updates'): {
+                Any(): int
+            },
+            Optional('failed_platform_updates'): {
+                Any(): int
+            }
+        },
+        Optional('adjacency_summary'): {
+            Optional('successful_platform_updates'): {
+                Any(): int
+            },
+            Optional('failed_platform_updates'): {
+                Any(): int
+            },
+            Optional('misc_adj_stats'): {
+                Any(): int
+            }
+        },
+        Optional('l3_ac_port_summary'): {
+            Optional('successful_platform_updates'): {
+                Any(): int
+            },
+            Optional('failed_platform_updates'): {
+                Any(): int
+            }
+        }
+    }
+
+class ShowPlatformSoftwareFedIpRouteSummary(ShowPlatformSoftwareFedIpRouteSummarySchema):
+    """Parser for show platform software fed {switch} ip route summary"""
+
+    cli_command = 'show platform software fed {switch} ip route summary'
+
+    def cli(self, switch, output=None):
+        if output is None:
+            cmd = self.cli_command.format(switch=switch)
+            output = self.device.execute(cmd)
+
+        # Initialize the return dictionary as empty
+        ret_dict = {}
+
+        # Total number of v4 fib sw entries = 6
+        p1 = re.compile(r'^Total number of v4 fib sw entries = (?P<sw_entries>\d+)$')
+
+        # Total number of v4 fib LPM hw entries for device:0 = 5
+        p2 = re.compile(r'^Total number of v4 fib LPM hw entries for device:(?P<device_id>\d+) = (?P<lpm_hw_entries>\d+)$')
+
+        # Total number of v4 fib EM hw entries for device:0 = 2
+        p3 = re.compile(r'^Total number of v4 fib EM hw entries for device:(?P<device_id>\d+) = (?P<em_hw_entries>\d+)$')
+
+        # ipv4route add ok:889350
+        p4 = re.compile(r'^(?P<key>[\w\s]+):(?P<value>\d+)$')
+
+        current_section = None
+        current_subsection = None
+        v4_fib_summary = None
+        devices = None
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # Total number of v4 fib sw entries = 6
+            m = p1.match(line)
+            if m:
+                if v4_fib_summary is None:
+                    v4_fib_summary = ret_dict.setdefault('v4_fib_summary', {})
+                    devices = v4_fib_summary.setdefault('devices', [])
+                v4_fib_summary['sw_entries'] = int(m.group('sw_entries'))
+                continue
+
+            # Total number of v4 fib LPM hw entries for device:0 = 5
+            m = p2.match(line)
+            if m:
+                if v4_fib_summary is None:
+                    v4_fib_summary = ret_dict.setdefault('v4_fib_summary', {})
+                    devices = v4_fib_summary.setdefault('devices', [])
+                device_id = int(m.group('device_id'))
+                lpm_hw_entries = int(m.group('lpm_hw_entries'))
+                current_device = {'device_id': device_id, 'lpm_hw_entries': lpm_hw_entries, 'em_hw_entries': 0}
+                devices.append(current_device)
+                continue
+
+            # Total number of v4 fib EM hw entries for device:0 = 2
+            m = p3.match(line)
+            if m:
+                if v4_fib_summary is None:
+                    continue  # no devices to update, skip
+                em_hw_entries = int(m.group('em_hw_entries'))
+                for device in devices:
+                    if device['device_id'] == int(m.group('device_id')):
+                        device['em_hw_entries'] = em_hw_entries
+                        break
+                continue
+
+            # ipv4route add ok:889350
+            m = p4.match(line)
+            if m:
+                key = m.group('key').strip().lower().replace(' ', '_')
+                value = int(m.group('value'))
+                if current_section:
+                    section_dict = ret_dict.setdefault(current_section, {})
+                    if current_subsection:
+                        subsection_dict = section_dict.setdefault(current_subsection, {})
+                        subsection_dict[key] = value
+                    else:
+                        section_dict[key] = value
+                continue
+
+            # Section headers
+            if 'Successful Platform updates:' in line:
+                current_subsection = 'successful_platform_updates'
+                continue
+            elif 'Failed Platform updates:' in line:
+                current_subsection = 'failed_platform_updates'
+                continue
+            elif 'Misc Adj Stats:' in line:
+                current_subsection = 'misc_adj_stats'
+                continue
+            elif 'l3 control generic count:' in line:
+                current_section = None
+                current_subsection = None
+                m = re.match(r'l3 control generic count:\s*(\d+)', line, re.I)
+                if m:
+                    ret_dict['l3_control_generic_count'] = int(m.group(1))
+                continue
+            elif 'ECR SUMMARY' in line:
+                current_section = 'ecr_summary'
+                current_subsection = None
+                continue
+            elif 'ADJACENCY SUMMARY' in line:
+                current_section = 'adjacency_summary'
+                current_subsection = None
+                continue
+            elif 'L3 AC PORT SUMMARY' in line:
+                current_section = 'l3_ac_port_summary'
+                current_subsection = None
+                continue
+
+        return ret_dict
+
+class ShowPlatformHardwareFedQosQueueStatsInternalPortTypePortNumAsicSchema(MetaParser):
+    """Schema for show platform hardware fed {switch} {mode} qos queue stats internal port type {port_type} port num {port_num} asic {asic}"""
+    schema = {
+        'interface': {
+            Any(): {  
+                'interface_id': str,
+                'stats_polling': str,
+                Optional('counters_warning'): str,
+                'asic': {
+                    Any(): { 
+                        'voq_id': {
+                            Any(): {  
+                                'packets': {
+                                    'enqueued': int,
+                                    'dropped': int,
+                                    'total': int
+                                },
+                                'bytes': {
+                                    'enqueued': int,
+                                    'dropped': int,
+                                    'total': int
+                                },
+                                'slice': {
+                                    Any(): { 
+                                        'sms_bytes': int,
+                                        'hbm_blocks': int,
+                                        'hbm_bytes': int
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+class ShowPlatformHardwareFedQosQueueStatsInternalPortTypePortNumAsic(ShowPlatformHardwareFedQosQueueStatsInternalPortTypePortNumAsicSchema):
+    """Parser for show platform hardware fed {switch} {mode} qos queue stats internal port_type recycle-port port_num {port_num} asic {asic}"""  
+    cli_command = [
+        "show platform hardware fed {switch} {mode} qos queue stats internal port_type recycle-port port_num {port_num} asic {asic}",
+        "show platform hardware fed {mode} qos queue stats internal port_type recycle-port port_num {port_num} asic {asic}"
+    ]
+
+    def cli(self, mode, port_num, asic, switch=None, output=None):
+        if output is None:
+            if switch:
+                cmd = self.cli_command[0].format(switch=switch, mode=mode, port_num=port_num, asic=asic)
+            else:
+                cmd = self.cli_command[1].format(mode=mode, port_num=port_num, asic=asic)
+            
+            output = self.device.execute(cmd)
+        
+        # VOQ Stats For : Recircport/1 [ 0x1 ]
+        p0 = re.compile(r'^VOQ Stats For : (?P<interface>[\w\/]+)\s+\[\s+(?P<interface_id>0x\w+)\s+\]$')
+
+        # Stats Polling : Enabled
+        p1 = re.compile(r'^Stats Polling\s+:\s+(?P<stats_polling>\w+)$')
+
+        # | Asic     |                                 0
+        p2 = re.compile(r'^\|\s+Asic\s+\|\s+(?P<asic>\d+)$')
+
+        # 0     | Enqueued |                                 0 |                                 0 |
+        # | Dropped  |                                 0 |                                 0 |
+        # | Total    |                                 0 |                                 0 |
+        p3 = re.compile(r'^(?P<voq_id>\d+)?\s*\|\s+(?P<header>\w+)\s+\|\s+(?P<packets>\d+)\s+\|\s+(?P<bytes>\d+)\s+\|$')
+
+        # |   Slice  |         0 |         1 |         2 |         3 |         4 |         5 |
+        p4 = re.compile(r'^\|\s+Slice\s+\|\s+(?P<slice0>\d+)\s\|\s+(?P<slice1>\d+)\s\|\s+(?P<slice2>\d+)\s\|\s+(?P<slice3>\d+)\s\|\s+(?P<slice4>\d+)\s\|\s+(?P<slice5>\d+)\s\|$')
+
+        # |SMS Bytes |         0 |         0 |         0 |         0 |         0 |         0 |
+        # |HBM Blocks|         0 |         0 |         0 |         0 |         0 |         0 |
+        # |HBM Bytes |         0 |         0 |         0 |         0 |         0 |         0 |
+        p5 = re.compile(r'^\|\s*(?P<slice_type>SMS Bytes|HBM Blocks|HBM Bytes)\s*\|\s+(?P<slice0>\d+)\s\|\s+(?P<slice1>\d+)\s\|\s+(?P<slice2>\d+)\s\|\s+(?P<slice3>\d+)\s\|\s+(?P<slice4>\d+)\s\|\s+(?P<slice5>\d+)\s\|$')
+
+        ret_dict = {}
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            # VOQ Stats For : Recircport/1 [ 0x1 ]
+            m = p0.match(line)
+            if m:
+                int_dict = ret_dict.setdefault('interface', {}).setdefault(m.groupdict()['interface'], {})
+                int_dict['interface_id'] = m.groupdict()['interface_id']
+                continue
+
+            # Stats Polling : Enabled
+            m = p1.match(line)
+            if m:
+                int_dict['stats_polling'] = m.groupdict()['stats_polling']
+                continue
+
+            # | Asic     |                                 0
+            m = p2.match(line)
+            if m:
+                asic_dict = int_dict.setdefault('asic', {}).setdefault(int(m.groupdict()['asic']), {})
+                continue
+
+            # 0      | Enqueued |                                 0 |                                 0 |
+            # | Dropped  |                                 0 |                                 0 |
+            # | Total    |                                 0 |                                 0 |
+            m = p3.match(line)
+            if m:
+                res_dict = m.groupdict()
+                if res_dict['voq_id']:
+                    voq_dict = asic_dict.setdefault('voq_id', {}).setdefault(res_dict['voq_id'], {})
+
+                pkts_dict = voq_dict.setdefault('packets', {})
+                bytes_dict = voq_dict.setdefault('bytes', {})
+                pkts_dict.setdefault(res_dict['header'].lower(), int(res_dict['packets']))
+                bytes_dict.setdefault(res_dict['header'].lower(), int(res_dict['bytes']))
+                continue
+
+            # |   Slice  |         0 |         1 |         2 |         3 |         4 |         5 |
+            m = p4.match(line)
+            if m:
+                slice_dict = voq_dict.setdefault('slice', {})
+                group = m.groupdict()
+                slice_dict0 = slice_dict.setdefault(group['slice0'], {})
+                slice_dict1 = slice_dict.setdefault(group['slice1'], {})
+                slice_dict2 = slice_dict.setdefault(group['slice2'], {})
+                slice_dict3 = slice_dict.setdefault(group['slice3'], {})
+                slice_dict4 = slice_dict.setdefault(group['slice4'], {})
+                slice_dict5 = slice_dict.setdefault(group['slice5'], {})
+                continue
+
+            # |SMS Bytes |         0 |         0 |         0 |         0 |         0 |         0 |
+            m = p5.match(line)
+            if m:
+                grp_output = m.groupdict()
+                slice_type = grp_output['slice_type'].replace(' ', '_').lower()
+                slice_dict0.setdefault(slice_type, int(grp_output['slice0']))
+                slice_dict1.setdefault(slice_type, int(grp_output['slice1']))
+                slice_dict2.setdefault(slice_type, int(grp_output['slice2']))
+                slice_dict3.setdefault(slice_type, int(grp_output['slice3']))
+                slice_dict4.setdefault(slice_type, int(grp_output['slice4']))
+                slice_dict5.setdefault(slice_type, int(grp_output['slice5']))
+                continue
+
+        return ret_dict
+
+class ShowPlatformHardwareChassisFantrayDetailAllSchema(MetaParser):
+    """Schema for:
+       show platform hardware chassis fantray detail all
+    """
+    schema = {
+        'fantrays': {
+            Any(): {
+                Optional('fans'): {
+                    Any(): {
+                        Optional('inlet_rpm'): int,
+                        Optional('outlet_rpm'): int,
+                        Optional('pwm_percent'): int,
+                    }
+                },
+                Optional('air_flow_direction'): str,
+                Optional('auto_poll_status'): str,
+                Optional('auto_poll_interval_seconds'): float,
+                Optional('control_mode'): str,
+                Optional('temperatures'): {
+                    Optional('slot_5'): int,
+                    Optional('slot_6'): int,
+                    Optional('local_a'): int,
+                    Optional('local_b'): int,
+                },
+                Optional('input_voltage_v'): float,
+                Optional('input_current_a'): float,
+                Optional('input_power_w'): float,
+                Optional('beacon_led'): str,
+                Optional('status_led'): str,
+            }
+        }
+    }
+
+
+class ShowPlatformHardwareChassisFantrayDetailAll(ShowPlatformHardwareChassisFantrayDetailAllSchema):
+    """Parser for:
+       show platform hardware chassis fantray detail all
+    """
+
+    cli_command = 'show platform hardware chassis fantray detail all'
+
+    def cli(self, output=None):
+        if output is None:
+            out = self.device.execute(self.cli_command)
+        else:
+            out = output
+
+        ret_dict = {}
+
+        # FT1:
+        p1 = re.compile(r'^\s*(?P<tray>FT\d+):\s*$')
+
+        #      1    4975    4972      33%
+        p2 = re.compile(r'^\s*(?P<row>\d+)\s+(?P<inlet>\d+)\s+(?P<outlet>\d+)\s+(?P<pwm>\d+)%\s*$')
+
+        #     Fantray Air Flow Direction   : Port-Side-Intake
+        p3 = re.compile(r'^\s*Fantray\s+(?P<key>[^:]+?)\s*:\s*(?P<val>.+?)\s*$')
+
+        current_tray = None
+
+        def first_number(s):
+            m = re.search(r'(-?\d+(?:\.\d+)?)', s)
+            return float(m.group(1)) if m else None
+
+        for line in out.splitlines():
+            line = line.rstrip()
+
+            # FT1:
+            m = p1.match(line)
+            if m:
+                
+                current_tray = m.group('tray')
+                td = ret_dict.setdefault('fantrays', {}).setdefault(current_tray, {})
+                td.setdefault('fans', {})
+                td.setdefault('temperatures', {})
+                continue
+
+            if not current_tray:
+                continue
+
+            #     Row   Inlet  Outlet     PWM
+            m = p2.match(line)
+            if m:
+                row = int(m.group('row'))
+                inlet = int(m.group('inlet'))
+                outlet = int(m.group('outlet'))
+                pwm = int(m.group('pwm'))
+                ret_dict['fantrays'][current_tray]['fans'][row] = {
+                    'inlet_rpm': inlet,
+                    'outlet_rpm': outlet,
+                    'pwm_percent': pwm
+                }
+                continue
+
+            #     Fantray Air Flow Direction   : Port-Side-Intake
+            m = p3.match(line)
+            if m:
+                key = m.group('key').strip()
+                val = m.group('val').strip()
+                td = ret_dict['fantrays'][current_tray]
+
+                if key.lower() == 'air flow direction':
+                    td['air_flow_direction'] = val
+                elif key.lower() == 'auto poll status':
+                    td['auto_poll_status'] = val
+                elif key.lower() == 'auto poll interval':
+                    num = first_number(val)
+                    if num is not None:
+                        td['auto_poll_interval_seconds'] = float(num)
+                elif key.lower() == 'control mode':
+                    td['control_mode'] = val
+                elif key.lower() == 'temperature slot-5':
+                    num = first_number(val)
+                    if num is not None:
+                        td['temperatures']['slot_5'] = int(num)
+                elif key.lower() == 'temperature slot-6':
+                    num = first_number(val)
+                    if num is not None:
+                        td['temperatures']['slot_6'] = int(num)
+                elif key.lower() == 'temperature local-a':
+                    num = first_number(val)
+                    if num is not None:
+                        td['temperatures']['local_a'] = int(num)
+                elif key.lower() == 'temperature local-b':
+                    num = first_number(val)
+                    if num is not None:
+                        td['temperatures']['local_b'] = int(num)
+                elif key.lower() == 'input voltage':
+                    num = first_number(val)
+                    if num is not None:
+                        td['input_voltage_v'] = float(num)
+                elif key.lower() == 'input current':
+                    num = first_number(val)
+                    if num is not None:
+                        td['input_current_a'] = float(num)
+                elif key.lower() == 'input power':
+                    num = first_number(val)
+                    if num is not None:
+                        td['input_power_w'] = float(num)
+                elif key.lower() == 'beacon led':
+                    td['beacon_led'] = val
+                elif key.lower() == 'status led':
+                    td['status_led'] = val
+
                 continue
 
         return ret_dict
